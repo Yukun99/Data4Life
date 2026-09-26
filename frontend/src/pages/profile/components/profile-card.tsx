@@ -1,7 +1,7 @@
 import ProfileDialog from '@/pages/profile/components/profile-dialog';
 import useProfileDialog from '@/pages/profile/hooks/use-profile-dialog';
 import { AVATARS } from '@/pages/profile/utils/avatars';
-import { formatDate } from '@/pages/profile/utils/format';
+import { formatDate } from '@/common/utils/format';
 import { useAppDispatch } from '@/store/hooks';
 import { logout, User } from '@/store/user-slice';
 import EditIcon from '@mui/icons-material/Edit';
@@ -72,6 +72,12 @@ const ProfileCard = ({ user }: ProfileCardProps) => {
         saving={dialog.saving}
         onCancel={dialog.close}
         onSave={dialog.save}
+        confirmingDelete={dialog.confirmingDelete}
+        deleteError={dialog.deleteError}
+        deleting={dialog.deleting}
+        onDelete={dialog.startDelete}
+        onDeleteCancel={dialog.cancelDelete}
+        onDeleteConfirm={dialog.confirmDelete}
       />
     </Paper>
   );

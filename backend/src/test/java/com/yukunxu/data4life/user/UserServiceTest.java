@@ -71,6 +71,17 @@ class UserServiceTest {
     }
 
     @Test
+    void isRootMatchesAdminEmailOnly() {
+        User root = userService.create("Admin", "admin@example.com", "secret123");
+        User other = userService.create("Ada", "ada@example.com", "secret123");
+        other.setAdmin(true);
+
+        assertThat(userService.isRoot(root)).isTrue();
+        assertThat(userService.isRoot(other)).isFalse();
+        assertThat(new UserService(repository, passwordEncoder, "").isRoot(root)).isFalse();
+    }
+
+    @Test
     void updateProfileTrimsNameAndSetsAvatar() {
         User created = userService.create("Ada", "ada@example.com", "secret123");
         assertThat(created.getAvatar()).isEqualTo(Avatar.ACCOUNT);

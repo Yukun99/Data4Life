@@ -121,6 +121,53 @@ class LoanServiceTest {
     }
 
     @Test
+    void forgivenKeepsFineButIsNotUnpaid() {
+        loan(SAPIENS, now.minus(days(60)), now.minus(days(40)), null, now.minus(days(39)));
+
+        LoanResponse row = onlyRow();
+        assertThat(row.status()).isEqualTo(LoanStatus.FORGIVEN);
+        assertThat(row.fine()).isEqualByComparingTo("6.00");
+        assertThat(loanService.history(user).stats().totalOverdueFines()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void fineUsesReturnDateOrNow() {
+        Loan open = loan(SAPIENS, now.minus(days(20)).plus(Duration.ofHours(1)), null, null);
+        Loan returned = loan(CHRISTIE, now.minus(days(40)), now.minus(days(20)), null);
+        Loan onTime = loan(KOKORO, now.minus(days(3)), null, null);
+
+        assertThat(LoanService.fine(open, now)).isEqualByComparingTo("6.00");
+        assertThat(LoanService.fine(returned, now.plus(days(10)))).isEqualByComparingTo("6.00");
+        assertThat(LoanService.fine(onTime, now)).isEqualByComparingTo("0.00");
+        assertThat(LoanService.fine(onTime, now).scale()).isEqualTo(2);
+    }
+
+    @Test
+    void forgiveMarksUnpaidLoanForgiven() {
+        Loan loan = loan(SAPIENS, now.minus(days(40)), now.minus(days(20)), null);
+
+        loanService.forgive(user, loan.getId());
+
+        assertThat(loan.getFineForgivenAt()).isNotNull();
+        assertThat(onlyRow().status()).isEqualTo(LoanStatus.FORGIVEN);
+        assertStatus(() -> loanService.forgive(user, loan.getId()), HttpStatus.CONFLICT);
+        assertStatus(() -> loanService.pay(user, loan.getId()), HttpStatus.CONFLICT);
+    }
+
+    @Test
+    void finedLoansListsOnlyLoansWithAFine() {
+        loan(SAPIENS, now.minus(days(3)), null, null);
+        loan(CHRISTIE, now.minus(days(30)), now.minus(days(25)), null);
+        Loan overdue = loan(KOKORO, now.minus(days(20)), null, null);
+        Loan unpaid = loan(RED_CHAMBER, now.minus(days(40)), now.minus(days(20)), null);
+        Loan paid = loan(SAPIENS, now.minus(days(60)), now.minus(days(40)), now.minus(days(39)));
+        Loan forgiven = loan(SAPIENS, now.minus(days(70)), now.minus(days(50)), null, now.minus(days(49)));
+
+        assertThat(loanService.finedLoans(user)).extracting(LoanResponse::id)
+                .containsExactly(overdue.getId(), unpaid.getId(), paid.getId(), forgiven.getId());
+    }
+
+    @Test
     void statsWithoutLoans() {
         HistoryResponse history = loanService.history(user);
 
@@ -176,8 +223,9 @@ class LoanServiceTest {
         Loan overdue = loan(SAPIENS, now.minus(days(20)), null, null);
         Loan returned = loan(SAPIENS, now.minus(days(30)), now.minus(days(25)), null);
         Loan paid = loan(SAPIENS, now.minus(days(60)), now.minus(days(40)), now.minus(days(39)));
+        Loan forgiven = loan(SAPIENS, now.minus(days(60)), now.minus(days(40)), null, now.minus(days(39)));
 
-        for (Loan loan : new Loan[] {borrowed, overdue, returned, paid}) {
+        for (Loan loan : new Loan[] {borrowed, overdue, returned, paid, forgiven}) {
             assertStatus(() -> loanService.pay(user, loan.getId()), HttpStatus.CONFLICT);
         }
     }
@@ -209,10 +257,16 @@ class LoanServiceTest {
     }
 
     private Loan loan(String isbn, Instant borrowedAt, Instant returnedAt, Instant finePaidAt) {
+        return loan(isbn, borrowedAt, returnedAt, finePaidAt, null);
+    }
+
+    private Loan loan(String isbn, Instant borrowedAt, Instant returnedAt, Instant finePaidAt,
+            Instant fineForgivenAt) {
         Loan loan = new Loan(user, bookRepository.findById(isbn).orElseThrow(), borrowedAt,
                 borrowedAt.plus(days(LoanService.LOAN_DAYS)));
         loan.setReturnedAt(returnedAt);
         loan.setFinePaidAt(finePaidAt);
+        loan.setFineForgivenAt(fineForgivenAt);
         return loanRepository.save(loan);
     }
 

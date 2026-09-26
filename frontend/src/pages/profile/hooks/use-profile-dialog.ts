@@ -1,5 +1,5 @@
 import { useAppDispatch } from '@/store/hooks';
-import { Avatar, updateProfile, User } from '@/store/user-slice';
+import { Avatar, deleteAccount, updateProfile, User } from '@/store/user-slice';
 import { useState } from 'react';
 
 const useProfileDialog = (user: User) => {
@@ -10,12 +10,17 @@ const useProfileDialog = (user: User) => {
   const [nameError, setNameError] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const openDialog = () => {
     setName(user.name);
     setAvatar(user.avatar);
     setNameError('');
     setError('');
+    setConfirmingDelete(false);
+    setDeleteError('');
     setOpen(true);
   };
 
@@ -39,7 +44,44 @@ const useProfileDialog = (user: User) => {
     }
   };
 
-  return { open, name, setName, avatar, setAvatar, nameError, error, saving, openDialog, close, save };
+  const startDelete = () => {
+    setDeleteError('');
+    setConfirmingDelete(true);
+  };
+
+  const cancelDelete = () => setConfirmingDelete(false);
+
+  const confirmDelete = async () => {
+    setDeleteError('');
+    setDeleting(true);
+    try {
+      await dispatch(deleteAccount()).unwrap();
+    } catch (err) {
+      setDeleteError(String(err));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return {
+    open,
+    name,
+    setName,
+    avatar,
+    setAvatar,
+    nameError,
+    error,
+    saving,
+    openDialog,
+    close,
+    save,
+    confirmingDelete,
+    deleteError,
+    deleting,
+    startDelete,
+    cancelDelete,
+    confirmDelete,
+  };
 };
 
 export default useProfileDialog;

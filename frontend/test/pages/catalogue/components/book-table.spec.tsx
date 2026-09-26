@@ -1,5 +1,6 @@
+import { MIN_COLUMN_PERCENT } from '@/common/components/data-table/sort';
 import BookTable from '@/pages/catalogue/components/book-table';
-import { DEFAULT_COLUMN_WIDTHS, MIN_COLUMN_PERCENT } from '@/store/catalogue-slice';
+import { DEFAULT_COLUMN_WIDTHS } from '@/store/catalogue-slice';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import mockFetch from '../../../mock-fetch';
 import withStore from '../../../with-store';

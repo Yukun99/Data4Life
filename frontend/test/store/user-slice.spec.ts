@@ -1,5 +1,5 @@
 import { createStore } from '@/store/store';
-import { fetchMe, login, logout, updateProfile } from '@/store/user-slice';
+import { deleteAccount, fetchMe, login, logout, updateProfile } from '@/store/user-slice';
 import mockFetch from '../mock-fetch';
 import { ada } from '../users';
 
@@ -52,6 +52,20 @@ describe('user slice', () => {
     const store = createStore({ user: { user: ada, loading: false } });
 
     await store.dispatch(logout());
+
+    expect(store.getState().user.user).toBeNull();
+  });
+
+  it('deleteAccount clears the user on success and keeps it on failure', async () => {
+    mockFetch({ 'DELETE /api/auth/me': { status: 403, body: { message: 'The root admin cannot be deleted' } } });
+    const store = createStore({ user: { user: ada, loading: false } });
+    const refused = await store.dispatch(deleteAccount());
+
+    expect(refused.payload).toBe('The root admin cannot be deleted');
+    expect(store.getState().user.user).toEqual(ada);
+
+    mockFetch({ 'DELETE /api/auth/me': { status: 204 } });
+    await store.dispatch(deleteAccount());
 
     expect(store.getState().user.user).toBeNull();
   });

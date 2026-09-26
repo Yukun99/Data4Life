@@ -1,12 +1,9 @@
 import {
-  buildQuery,
   DEFAULT_COLUMN_WIDTHS,
   EMPTY_FILTER,
   fetchBooks,
   fetchColumnWidths,
   goTo,
-  MIN_COLUMN_PERCENT,
-  resizeColumns,
   setFilter,
   setSize,
   switchSort,
@@ -63,18 +60,6 @@ describe('catalogue slice', () => {
       error: '',
       columnWidths: DEFAULT_COLUMN_WIDTHS,
     });
-  });
-
-  it('buildQuery keeps a fixed order and skips empty filters', () => {
-    const base = { page: 2, size: 20, sort: null, filter: EMPTY_FILTER };
-    expect(buildQuery(base)).toBe('page=2&size=20');
-    expect(
-      buildQuery({
-        ...base,
-        sort: { key: 'genre', dir: 'desc' },
-        filter: { ...EMPTY_FILTER, stock: '1', title: 'Dune', genreId: '4' },
-      }),
-    ).toBe('page=2&size=20&sort=genre&dir=desc&title=Dune&genreId=4&stock=1');
   });
 
   it('fetchBooks stores the page and filter options', async () => {
@@ -157,20 +142,6 @@ describe('catalogue slice', () => {
     store.dispatch(toggleSort('author'));
     store.dispatch(switchSort('title'));
     expect(store.getState().catalogue.sort).toEqual({ key: 'title', dir: 'desc' });
-  });
-
-  it('resizeColumns keeps the total and the minimum', () => {
-    const widths = DEFAULT_COLUMN_WIDTHS;
-
-    const grown = resizeColumns({ widths, key: 'isbn', delta: 3.26 });
-    expect(grown.isbn).toBe(widths.isbn + 3.3);
-    expect(grown.titleAuthor).toBe(widths.titleAuthor - 3.3);
-
-    const clamped = resizeColumns({ widths, key: 'amount', delta: 50 });
-    expect(clamped.stock).toBe(MIN_COLUMN_PERCENT);
-    expect(clamped.amount).toBe(widths.amount + widths.stock - MIN_COLUMN_PERCENT);
-
-    expect(resizeColumns({ widths, key: 'actions', delta: 5 })).toEqual(widths);
   });
 
   it('fetchColumnWidths applies saved widths and ignores an empty answer', async () => {

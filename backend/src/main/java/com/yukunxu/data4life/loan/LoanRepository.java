@@ -14,6 +14,9 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
 
     boolean existsByUser(User user);
 
+    @Query("select l from Loan l join fetch l.user")
+    List<Loan> findAllWithUser();
+
     boolean existsByBook(Book book);
 
     long countByBookAndReturnedAtIsNull(Book book);

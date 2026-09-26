@@ -41,6 +41,9 @@ public class Loan {
     @Column(name = "fine_paid_at")
     private Instant finePaidAt;
 
+    @Column(name = "fine_forgiven_at")
+    private Instant fineForgivenAt;
+
     protected Loan() {
     }
 
@@ -85,5 +88,13 @@ public class Loan {
 
     public void setFinePaidAt(Instant finePaidAt) {
         this.finePaidAt = finePaidAt;
+    }
+
+    public Instant getFineForgivenAt() {
+        return fineForgivenAt;
+    }
+
+    public void setFineForgivenAt(Instant fineForgivenAt) {
+        this.fineForgivenAt = fineForgivenAt;
     }
 }

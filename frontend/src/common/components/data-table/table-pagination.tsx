@@ -8,13 +8,14 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
 
-type CataloguePaginationProps = {
+type TablePaginationProps = {
   page: number;
   totalPages: number;
   onGoTo: (page: number) => void;
+  testIdPrefix: string;
 };
 
-const CataloguePagination = ({ page, totalPages, onGoTo }: CataloguePaginationProps) => {
+const TablePagination = ({ page, totalPages, onGoTo, testIdPrefix }: TablePaginationProps) => {
   const [draft, setDraft] = useState<string | null>(null);
   const pages = Math.max(totalPages, 1);
   const atStart = page <= 0;
@@ -41,7 +42,7 @@ const CataloguePagination = ({ page, totalPages, onGoTo }: CataloguePaginationPr
         aria-label="First page"
         disabled={atStart}
         onClick={() => onGoTo(0)}
-        data-testid="catalogue-first"
+        data-testid={`${testIdPrefix}-first`}
       >
         <FirstPage />
       </IconButton>
@@ -49,7 +50,7 @@ const CataloguePagination = ({ page, totalPages, onGoTo }: CataloguePaginationPr
         aria-label="Previous page"
         disabled={atStart}
         onClick={() => onGoTo(page - 1)}
-        data-testid="catalogue-prev"
+        data-testid={`${testIdPrefix}-prev`}
       >
         <ChevronLeft />
       </IconButton>
@@ -65,16 +66,16 @@ const CataloguePagination = ({ page, totalPages, onGoTo }: CataloguePaginationPr
             inputMode: 'numeric',
             'aria-label': 'Page',
             style: { textAlign: 'center' },
-            'data-testid': 'catalogue-page-input',
+            'data-testid': `${testIdPrefix}-page-input`,
           },
         }}
       />
-      <Typography data-testid="catalogue-total-pages">/ {pages}</Typography>
+      <Typography data-testid={`${testIdPrefix}-total-pages`}>/ {pages}</Typography>
       <IconButton
         aria-label="Next page"
         disabled={atEnd}
         onClick={() => onGoTo(page + 1)}
-        data-testid="catalogue-next"
+        data-testid={`${testIdPrefix}-next`}
       >
         <ChevronRight />
       </IconButton>
@@ -82,7 +83,7 @@ const CataloguePagination = ({ page, totalPages, onGoTo }: CataloguePaginationPr
         aria-label="Last page"
         disabled={atEnd}
         onClick={() => onGoTo(pages - 1)}
-        data-testid="catalogue-last"
+        data-testid={`${testIdPrefix}-last`}
       >
         <LastPage />
       </IconButton>
@@ -90,4 +91,4 @@ const CataloguePagination = ({ page, totalPages, onGoTo }: CataloguePaginationPr
   );
 };
 
-export default CataloguePagination;
+export default TablePagination;

@@ -55,6 +55,17 @@ export const updateProfile = createAsyncThunk<User, UpdateProfileParams, { rejec
   },
 );
 
+export const deleteAccount = createAsyncThunk<void, void, { rejectValue: string }>(
+  'user/deleteAccount',
+  async (_, { rejectWithValue }) => {
+    try {
+      return await apiFetch<void>('/api/auth/me', { method: 'DELETE' });
+    } catch (err) {
+      return rejectWithValue(errorMessage(err));
+    }
+  },
+);
+
 export const logout = createAsyncThunk('user/logout', async () => {
   await apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
 });
@@ -80,6 +91,9 @@ const userSlice = createSlice({
         state.user = action.payload;
       })
       .addCase(logout.fulfilled, (state) => {
+        state.user = null;
+      })
+      .addCase(deleteAccount.fulfilled, (state) => {
         state.user = null;
       });
   },

@@ -1,9 +1,8 @@
-import { ColumnKey } from '@/store/catalogue-slice';
 import Box from '@mui/material/Box';
 import { PointerEvent } from 'react';
 
 type ColumnDividerProps = {
-  columnKey: ColumnKey;
+  columnKey: string;
   onPointerDown: (event: PointerEvent<HTMLElement>) => void;
 };
 

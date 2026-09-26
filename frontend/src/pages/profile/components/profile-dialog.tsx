@@ -23,7 +23,51 @@ type ProfileDialogProps = {
   saving: boolean;
   onCancel: () => void;
   onSave: () => void;
+  confirmingDelete: boolean;
+  deleteError: string;
+  deleting: boolean;
+  onDelete: () => void;
+  onDeleteCancel: () => void;
+  onDeleteConfirm: () => void;
 };
+
+type DeleteConfirmProps = {
+  error: string;
+  deleting: boolean;
+  onBack: () => void;
+  onConfirm: () => void;
+};
+
+const DeleteConfirm = ({ error, deleting, onBack, onConfirm }: DeleteConfirmProps) => (
+  <>
+    <DialogTitle>Delete your account?</DialogTitle>
+    <DialogContent>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} data-testid="profile-delete-error">
+          {error}
+        </Alert>
+      )}
+      <Typography>
+        This removes your profile, borrowing history and interests. Return any books and settle
+        any fines first.
+      </Typography>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onBack} data-testid="profile-delete-cancel">
+        Back
+      </Button>
+      <Button
+        variant="contained"
+        color="error"
+        onClick={onConfirm}
+        loading={deleting}
+        data-testid="profile-delete-confirm"
+      >
+        Delete
+      </Button>
+    </DialogActions>
+  </>
+);
 
 const ProfileDialog = ({
   open,
@@ -36,59 +80,79 @@ const ProfileDialog = ({
   saving,
   onCancel,
   onSave,
+  confirmingDelete,
+  deleteError,
+  deleting,
+  onDelete,
+  onDeleteCancel,
+  onDeleteConfirm,
 }: ProfileDialogProps) => (
   <Dialog open={open} onClose={onCancel} fullWidth maxWidth="xs" data-testid="profile-dialog">
-    <DialogTitle>Edit profile</DialogTitle>
-    <DialogContent>
-      <Stack spacing={2} sx={{ pt: 1 }}>
-        {error && (
-          <Alert severity="error" data-testid="profile-error">
-            {error}
-          </Alert>
-        )}
-        <TextField
-          label="Name"
-          required
-          value={name}
-          onChange={(event) => onNameChange(event.target.value)}
-          error={!!nameError}
-          helperText={nameError}
-          slotProps={{ htmlInput: { maxLength: 100, 'data-testid': 'profile-name-input' } }}
-        />
-        <Typography variant="subtitle2">Icon</Typography>
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
-          {AVATAR_KEYS.map((key) => {
-            const Icon = AVATARS[key];
-            const selected = key === avatar;
-            return (
-              <IconButton
-                key={key}
-                aria-label={`Use the ${key.toLowerCase()} icon`}
-                aria-pressed={selected}
-                color={selected ? 'primary' : 'default'}
-                onClick={() => onAvatarChange(key)}
-                sx={{
-                  border: 2,
-                  borderColor: selected ? 'primary.main' : 'transparent',
-                  borderRadius: 2,
-                }}
-                data-testid={`profile-avatar-${key}`}
-              >
-                <Icon fontSize="large" />
-              </IconButton>
-            );
-          })}
-        </Box>
-      </Stack>
-    </DialogContent>
-    <DialogActions>
-      <Button onClick={onCancel} data-testid="profile-cancel">
-        Cancel
-      </Button>
-      <Button variant="contained" onClick={onSave} loading={saving} data-testid="profile-save">
-        Save
-      </Button>
-    </DialogActions>
+    {confirmingDelete ? (
+      <DeleteConfirm
+        error={deleteError}
+        deleting={deleting}
+        onBack={onDeleteCancel}
+        onConfirm={onDeleteConfirm}
+      />
+    ) : (
+      <>
+        <DialogTitle>Edit profile</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            {error && (
+              <Alert severity="error" data-testid="profile-error">
+                {error}
+              </Alert>
+            )}
+            <TextField
+              label="Name"
+              required
+              value={name}
+              onChange={(event) => onNameChange(event.target.value)}
+              error={!!nameError}
+              helperText={nameError}
+              slotProps={{ htmlInput: { maxLength: 100, 'data-testid': 'profile-name-input' } }}
+            />
+            <Typography variant="subtitle2">Icon</Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
+              {AVATAR_KEYS.map((key) => {
+                const Icon = AVATARS[key];
+                const selected = key === avatar;
+                return (
+                  <IconButton
+                    key={key}
+                    aria-label={`Use the ${key.toLowerCase()} icon`}
+                    aria-pressed={selected}
+                    color={selected ? 'primary' : 'default'}
+                    onClick={() => onAvatarChange(key)}
+                    sx={{
+                      border: 2,
+                      borderColor: selected ? 'primary.main' : 'transparent',
+                      borderRadius: 2,
+                    }}
+                    data-testid={`profile-avatar-${key}`}
+                  >
+                    <Icon fontSize="large" />
+                  </IconButton>
+                );
+              })}
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button color="error" onClick={onDelete} sx={{ mr: 'auto' }} data-testid="profile-delete">
+            Delete account
+          </Button>
+          <Button onClick={onCancel} data-testid="profile-cancel">
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={onSave} loading={saving} data-testid="profile-save">
+            Save
+          </Button>
+        </DialogActions>
+      </>
+    )}
   </Dialog>
 );
 

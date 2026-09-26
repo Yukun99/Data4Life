@@ -48,6 +48,10 @@ public class UserService implements UserDetailsService {
         return repository.save(user);
     }
 
+    public boolean isRoot(User user) {
+        return !adminEmail.isEmpty() && adminEmail.equals(user.getEmail());
+    }
+
     @Transactional
     public void promoteAdmin() {
         if (adminEmail.isEmpty()) {

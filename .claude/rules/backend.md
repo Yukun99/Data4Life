@@ -21,7 +21,8 @@ paths:
   user (`/api/auth/*`), `catalogue/` holds the books, genres and languages tables and the admin book endpoints
   (`BookController`, `BookService`, `/api/books`),
   `interest/` holds a user's genre and language interests (`/api/interests`), `loan/` holds loans,
-  fines and payments (`/api/loans`), and `config/` holds the security setup and the JSON error
+  fines and payments (`/api/loans`), `admin/` holds the admin users page endpoints
+  (`AdminUserController`, `AdminUserService`, `/api/admin/users`), and `config/` holds the security setup and the JSON error
   handler. A new feature gets its own package with its controller, service, repository
   and entities together; cross-cutting configuration goes in a `config/` package when needed.
 - Every HTTP route sits under `/api/`; that prefix is what the Vite dev proxy and the Nginx
@@ -37,17 +38,27 @@ paths:
 - Spring Security with a server-side session: `POST /api/auth/login` checks the email and BCrypt
   password hash and stores the login in the HTTP session, so the browser only carries the session
   cookie. `POST /api/auth/logout` invalidates it and `GET /api/auth/me` returns the current user.
+  `DELETE /api/auth/me` deletes the caller's own account under the same loan and fine checks as
+  the admin delete (`AdminUserService`, which `auth/` therefore depends on), refuses the root admin
+  with `403`, and logs the session out.
 - Public routes: `POST /api/users`, `POST /api/auth/login`, `GET /api/ping` and
   `/actuator/health`. Everything else needs a session and answers `401` without one, including
   `PUT /api/users/me`, `/api/interests/**` and `/api/loans/**`; there are no login redirects or
   forms.
-- `/api/books/**` and `/api/catalogue/**` are admin only, both as a URL rule in `SecurityConfig`
-  and through `@PreAuthorize` on `BookController` and `ColumnController`. Non-admins get
+- `/api/books/**`, `/api/catalogue/**` and `/api/admin/**` are admin only, both as a URL rule in
+  `SecurityConfig` and through `@PreAuthorize` on `BookController`, `ColumnController` and
+  `AdminUserController`. Non-admins get
   `403 { "message": "Forbidden" }`.
 - Users have an `is_admin` flag. The account whose email matches `ADMIN_EMAIL` becomes admin on
   sign-up, and `AdminPromoter` promotes it at startup if it already exists. Admins get `ROLE_ADMIN`
   on top of `ROLE_USER`, and `@EnableMethodSecurity` is on, so admin-only endpoints can use
-  `@PreAuthorize("hasRole('ADMIN')")`.
+  `@PreAuthorize("hasRole('ADMIN')")`. That `ADMIN_EMAIL` account is the root admin
+  (`UserService.isRoot`). With `ADMIN_EMAIL` unset nobody is root, so admins with no recorded
+  promoter cannot be demoted by anyone.
+- Every login is registered in a `SessionRegistry` with the email as principal (`AuthController`
+  does this by hand, because login does not go through a form-login filter). Promoting or demoting a
+  user expires all of their sessions, so their next request answers `401` and they must log in
+  again, which rebuilds their roles.
 - CSRF protection is off because the site is same-origin and the API only accepts JSON.
 - Errors come back as `{ "message": "..." }` from `ApiExceptionHandler`: `400` for validation, `401`
   for bad credentials and `409` for an email that is already taken. Services throw
@@ -65,7 +76,9 @@ paths:
   the tables on the first `./mvnw spring-boot:run`.
 - Genres, languages and ten sample books are seeded by migrations. Loans last 14 days and overdue
   fines are $1.00 per started day (`LoanService`). A loan's status (borrowed, overdue, returned,
-  unpaid, paid) and fine are derived from its dates, never stored.
+  unpaid, paid, forgiven) and fine are derived from its dates and are never stored themselves. A
+  fine being paid or forgiven is stored as a timestamp (`fine_paid_at`, `fine_forgiven_at`); paid
+  wins when both are set.
 - A book's `stock` is always `amount` minus its open loans (loans with no return date). The
   catalogue endpoints only take `amount` and recompute `stock`; an amount below the open loans is
   rejected.
@@ -88,13 +101,41 @@ paths:
 - `LoanSeeder` gives every user without loans five sample loans at startup, one per status. It
   carries a `TODO` to remove it once the borrow and return flow creates real loans.
 
+## Admin User Endpoints
+
+- `GET /api/admin/users` lists users with their borrow and fine statistics, with the same `page`,
+  `size`, `sort`, `dir` and exact-match filter parameters as the catalogue. Sort keys and filters
+  are `name`, `email`, `admin`, `joined` (sort only), `totalBorrows`, `currentBorrows`, `totalFines`
+  and `currentFines`. Current fines are unpaid fines plus fines still growing on overdue loans;
+  total fines also include paid and forgiven ones. Each row carries `demotable`, computed for the
+  caller, so the frontend never repeats the demotion rules.
+- This list is filtered, sorted and paged in memory, not in SQL, because fines depend on the
+  current time and started-day rounding that would otherwise be duplicated in queries. A library
+  has few enough users for this to be cheap.
+- `POST /api/admin/users/{id}/promote` makes a user admin and records the promoter in
+  `users.promoted_by`. `POST /api/admin/users/{id}/demote` follows these rules: the root admin can
+  never be demoted, nobody can demote themselves, root can demote any other admin, and otherwise
+  only the recorded promoter can (an admin with no recorded promoter counts as promoted by root).
+- `DELETE /api/admin/users/{id}` removes a user with their loans and interests. Who may delete whom
+  follows the demotion rules (never root, never yourself, an admin only by root or their promoter,
+  a non-admin by any admin). It answers `409` while the user still has books on loan or unpaid
+  fines, so those must be returned, paid or forgiven first. Users the deleted admin had promoted
+  keep their admin flag with no recorded promoter. Each row carries `deletable` for the caller.
+- `GET /api/admin/users/{id}/fines` lists the user's loans that carry a fine, and
+  `POST /api/admin/users/{id}/loans/{loanId}/forgive` forgives an unpaid fine (`409` for any other
+  status). Forgiven fines no longer count as owed and cannot be paid.
+- `GET` and `PUT /api/admin/users/columns` store the admin's users table column widths in
+  `users.users_columns`, the same way as the catalogue column widths.
+
 ## Tests
 
 - Tests mirror the main package under `src/test/java`. `Data4LifeApplicationTests` boots the full
   context; `PingControllerTest` is a `@WebMvcTest` slice (it uses `@WithMockUser`, because the
   slice does not load `SecurityConfig`). `UserFlowTest` covers the whole sign-up and login flow
-  through `MockMvc`, carrying the session between requests; `InterestFlowTest`, `LoanFlowTest` and
-  `BookFlowTest` and `ColumnFlowTest` do the same for their routes, and `LoanServiceTest` covers every loan status and fine rule.
+  through `MockMvc`, carrying the session between requests; `InterestFlowTest`, `LoanFlowTest`,
+  `BookFlowTest`, `ColumnFlowTest` and `AdminUserFlowTest` do the same for their routes, and
+  `LoanServiceTest` covers every loan status and fine rule. `AdminUserFlowTest` also checks that a
+  demoted admin's old session answers `401`, the delete rules and self-deletion.
 - Full-context tests carry `@ActiveProfiles("test")`, which loads `application-test.yml` (H2
   in-memory, PostgreSQL mode) on top of `application.yml`. Keep it a profile file rather than a
   second `application.yml`, because a test `application.yml` would shadow the main one entirely.

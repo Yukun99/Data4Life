@@ -1,0 +1,1 @@
+ALTER TABLE loans ADD COLUMN fine_forgiven_at TIMESTAMP WITH TIME ZONE;

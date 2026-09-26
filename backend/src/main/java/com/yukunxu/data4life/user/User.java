@@ -50,6 +50,12 @@ public class User {
     @Column(name = "catalogue_columns", length = 100)
     private String catalogueColumns;
 
+    @Column(name = "users_columns", length = 100)
+    private String usersColumns;
+
+    @Column(name = "promoted_by")
+    private Long promotedById;
+
     @ManyToMany
     @JoinTable(name = "user_genres", joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "genre_id"))
@@ -126,6 +132,22 @@ public class User {
 
     public void setCatalogueColumns(String catalogueColumns) {
         this.catalogueColumns = catalogueColumns;
+    }
+
+    public String getUsersColumns() {
+        return usersColumns;
+    }
+
+    public void setUsersColumns(String usersColumns) {
+        this.usersColumns = usersColumns;
+    }
+
+    public Long getPromotedById() {
+        return promotedById;
+    }
+
+    public void setPromotedById(Long promotedById) {
+        this.promotedById = promotedById;
     }
 
     public Set<Genre> getGenres() {

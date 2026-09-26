@@ -1,16 +1,20 @@
+import FilterDialog from '@/common/components/data-table/filter-dialog';
+import TablePagination from '@/common/components/data-table/table-pagination';
+import TableToolbar from '@/common/components/data-table/table-toolbar';
+import { PAGE_SIZES } from '@/common/components/data-table/types';
 import BookDialog from '@/pages/catalogue/components/book-dialog';
 import BookTable from '@/pages/catalogue/components/book-table';
-import CataloguePagination from '@/pages/catalogue/components/catalogue-pagination';
-import CatalogueToolbar from '@/pages/catalogue/components/catalogue-toolbar';
 import DeleteDialog from '@/pages/catalogue/components/delete-dialog';
-import FilterDialog from '@/pages/catalogue/components/filter-dialog';
 import MergeDialog from '@/pages/catalogue/components/merge-dialog';
 import useBookDialog from '@/pages/catalogue/hooks/use-book-dialog';
 import useBooks from '@/pages/catalogue/hooks/use-books';
 import useDeleteBook from '@/pages/catalogue/hooks/use-delete-book';
 import useMergeDialog from '@/pages/catalogue/hooks/use-merge-dialog';
-import { FILTER_KEYS } from '@/store/catalogue-slice';
+import { fieldsFor } from '@/pages/catalogue/utils/filter-fields';
+import { EMPTY_FILTER, FILTER_KEYS } from '@/store/catalogue-slice';
+import Add from '@mui/icons-material/Add';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import { useState } from 'react';
 
 const CataloguePage = () => {
@@ -24,12 +28,23 @@ const CataloguePage = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, p: 2, gap: 2 }}>
-      <CatalogueToolbar
+      <TableToolbar
         size={books.size}
+        sizes={PAGE_SIZES}
         activeFilters={FILTER_KEYS.filter((key) => books.filter[key] !== '').length}
-        onAdd={() => dialog.openDialog()}
         onFilter={() => setFiltering(true)}
         onSizeChange={books.setSize}
+        testIdPrefix="catalogue"
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => dialog.openDialog()}
+            data-testid="catalogue-add"
+          >
+            Add
+          </Button>
+        }
       />
       <BookTable
         books={books.books}
@@ -41,11 +56,18 @@ const CataloguePage = () => {
         onEdit={dialog.openDialog}
         onDelete={remove.open}
       />
-      <CataloguePagination page={books.page} totalPages={books.totalPages} onGoTo={books.goTo} />
+      <TablePagination
+        page={books.page}
+        totalPages={books.totalPages}
+        onGoTo={books.goTo}
+        testIdPrefix="catalogue"
+      />
       {filtering && (
         <FilterDialog
+          title="Filter books"
+          fields={fieldsFor(books.filters)}
           filter={books.filter}
-          options={books.filters}
+          empty={EMPTY_FILTER}
           onApply={(filter) => {
             books.applyFilter(filter);
             setFiltering(false);

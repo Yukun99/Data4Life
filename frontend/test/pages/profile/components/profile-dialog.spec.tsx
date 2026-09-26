@@ -86,6 +86,42 @@ describe('ProfileDialog', () => {
     expect(screen.getByTestId('profile-dialog')).toBeInTheDocument();
   });
 
+  it('deletes the account after confirming', async () => {
+    const fetchMock = mockFetch({ 'DELETE /api/auth/me': { status: 204 } });
+    const store = renderCard();
+    await openDialog();
+
+    await userEvent.click(screen.getByTestId('profile-delete'));
+    expect(screen.getByTestId('profile-dialog')).toHaveTextContent('Delete your account?');
+    await userEvent.click(screen.getByTestId('profile-delete-cancel'));
+    expect(screen.getByTestId('profile-name-input')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('profile-delete'));
+    await userEvent.click(screen.getByTestId('profile-delete-confirm'));
+
+    await waitFor(() => expect(store.getState().user.user).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/me',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('shows why the account cannot be deleted', async () => {
+    mockFetch({
+      'DELETE /api/auth/me': { status: 409, body: { message: 'User still has books on loan' } },
+    });
+    const store = renderCard();
+    await openDialog();
+
+    await userEvent.click(screen.getByTestId('profile-delete'));
+    await userEvent.click(screen.getByTestId('profile-delete-confirm'));
+
+    expect(await screen.findByTestId('profile-delete-error')).toHaveTextContent(
+      'User still has books on loan',
+    );
+    expect(store.getState().user.user).toEqual(ada);
+  });
+
   it('discards changes on cancel', async () => {
     const fetchMock = mockFetch({});
     renderCard();

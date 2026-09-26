@@ -1,6 +1,6 @@
 import LoanRow from '@/pages/profile/components/loan-row';
 import useHistory from '@/pages/profile/hooks/use-history';
-import { formatMoney } from '@/pages/profile/utils/format';
+import { formatMoney } from '@/common/utils/format';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';

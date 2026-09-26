@@ -1,7 +1,14 @@
-import { Loan, LoanStatus } from '@/store/history-slice';
-import { daysUntil, formatDate, formatMoney, statusLabel } from '@/pages/profile/utils/format';
+import {
+  chipColor,
+  daysUntil,
+  formatDate,
+  formatDays,
+  formatMoney,
+  statusLabel,
+} from '@/common/utils/format';
+import { Loan } from '@/store/history-slice';
 import Button from '@mui/material/Button';
-import Chip, { ChipProps } from '@mui/material/Chip';
+import Chip from '@mui/material/Chip';
 import ListItem from '@mui/material/ListItem';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -12,19 +19,9 @@ type LoanRowProps = {
   onPay: (id: number) => void;
 };
 
-const chipColor: Record<LoanStatus, ChipProps['color']> = {
-  BORROWED: 'primary',
-  RETURNED: 'success',
-  OVERDUE: 'error',
-  UNPAID: 'warning',
-  PAID: 'default',
-};
-
-const days = (count: number) => `${count} ${count === 1 ? 'day' : 'days'}`;
-
 const dueText = (dueAt: string) => {
   const left = daysUntil(dueAt);
-  return left > 0 ? `Due in ${days(left)}` : 'Due today';
+  return left > 0 ? `Due in ${formatDays(left)}` : 'Due today';
 };
 
 const detail = ({ status, dueAt, overdueDays, fine }: Loan) => {
@@ -32,11 +29,13 @@ const detail = ({ status, dueAt, overdueDays, fine }: Loan) => {
     case 'BORROWED':
       return dueText(dueAt);
     case 'OVERDUE':
-      return `${days(overdueDays)} overdue · ${formatMoney(fine)} so far`;
+      return `${formatDays(overdueDays)} overdue · ${formatMoney(fine)} so far`;
     case 'UNPAID':
-      return `${days(overdueDays)} late · ${formatMoney(fine)}`;
+      return `${formatDays(overdueDays)} late · ${formatMoney(fine)}`;
     case 'PAID':
       return `${formatMoney(fine)} paid`;
+    case 'FORGIVEN':
+      return `${formatDays(overdueDays)} late · ${formatMoney(fine)} forgiven`;
     case 'RETURNED':
       return '';
   }

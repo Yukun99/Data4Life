@@ -1,9 +1,9 @@
-import SortLabel from '@/pages/catalogue/components/sort-label';
-import { Sort } from '@/store/catalogue-slice';
+import SortLabel from '@/common/components/data-table/sort-label';
+import { SortState } from '@/common/components/data-table/types';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const renderLabel = (sort: Sort, onClick = vi.fn()) => {
+const renderLabel = (sort: SortState<string>, onClick = vi.fn()) => {
   render(<SortLabel label="Title" sortKey="title" sort={sort} onClick={onClick} />);
   return onClick;
 };

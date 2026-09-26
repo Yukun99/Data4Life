@@ -1,36 +1,37 @@
-import { PAGE_SIZES } from '@/store/catalogue-slice';
-import Add from '@mui/icons-material/Add';
 import FilterList from '@mui/icons-material/FilterList';
 import Badge from '@mui/material/Badge';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import { ReactNode } from 'react';
 
-type CatalogueToolbarProps = {
+type TableToolbarProps = {
   size: number;
+  sizes: number[];
   activeFilters: number;
-  onAdd: () => void;
   onFilter: () => void;
   onSizeChange: (size: number) => void;
+  testIdPrefix: string;
+  actions?: ReactNode;
 };
 
-const CatalogueToolbar = ({
+const TableToolbar = ({
   size,
+  sizes,
   activeFilters,
-  onAdd,
   onFilter,
   onSizeChange,
-}: CatalogueToolbarProps) => (
+  testIdPrefix,
+  actions,
+}: TableToolbarProps) => (
   <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-    <Button variant="contained" startIcon={<Add />} onClick={onAdd} data-testid="catalogue-add">
-      Add
-    </Button>
-    <Badge badgeContent={activeFilters} color="primary" data-testid="catalogue-filter-count">
+    {actions}
+    <Badge badgeContent={activeFilters} color="primary" data-testid={`${testIdPrefix}-filter-count`}>
       <Button
         variant="outlined"
         startIcon={<FilterList />}
         onClick={onFilter}
-        data-testid="catalogue-filter"
+        data-testid={`${testIdPrefix}-filter`}
       >
         Filter
       </Button>
@@ -42,9 +43,9 @@ const CatalogueToolbar = ({
       value={size}
       onChange={(event) => onSizeChange(Number(event.target.value))}
       sx={{ ml: 'auto !important', width: 110 }}
-      slotProps={{ select: { native: true }, htmlInput: { 'data-testid': 'catalogue-size' } }}
+      slotProps={{ select: { native: true }, htmlInput: { 'data-testid': `${testIdPrefix}-size` } }}
     >
-      {PAGE_SIZES.map((option) => (
+      {sizes.map((option) => (
         <option key={option} value={option}>
           {option}
         </option>
@@ -53,4 +54,4 @@ const CatalogueToolbar = ({
   </Stack>
 );
 
-export default CatalogueToolbar;
+export default TableToolbar;

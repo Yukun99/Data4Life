@@ -47,9 +47,7 @@ public class LoanService {
 
     @Transactional
     public void pay(User user, Long loanId) {
-        Loan loan = repository.findById(loanId)
-                .filter(found -> found.getUser().getId().equals(user.getId()))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Loan not found"));
+        Loan loan = find(user, loanId);
         Instant now = Instant.now();
         if (status(loan, now) != LoanStatus.UNPAID) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This loan has no unpaid fine");
@@ -65,30 +63,65 @@ public class LoanService {
                 .forEach(loan -> loan.setFinePaidAt(now));
     }
 
-    static LoanStatus status(Loan loan, Instant now) {
+    @Transactional(readOnly = true)
+    public List<LoanResponse> finedLoans(User user) {
+        Instant now = Instant.now();
+        return repository.findByUserOrderByBorrowedAtDesc(user).stream()
+                .filter(loan -> fine(loan, now).signum() > 0)
+                .map(loan -> toResponse(loan, now))
+                .toList();
+    }
+
+    @Transactional
+    public void forgive(User user, Long loanId) {
+        Loan loan = find(user, loanId);
+        Instant now = Instant.now();
+        if (status(loan, now) != LoanStatus.UNPAID) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This loan has no unpaid fine");
+        }
+        loan.setFineForgivenAt(now);
+    }
+
+    public static LoanStatus status(Loan loan, Instant now) {
         if (loan.getReturnedAt() == null) {
             return now.isAfter(loan.getDueAt()) ? LoanStatus.OVERDUE : LoanStatus.BORROWED;
         }
         if (!loan.getReturnedAt().isAfter(loan.getDueAt())) {
             return LoanStatus.RETURNED;
         }
-        return loan.getFinePaidAt() == null ? LoanStatus.UNPAID : LoanStatus.PAID;
+        if (loan.getFinePaidAt() != null) {
+            return LoanStatus.PAID;
+        }
+        return loan.getFineForgivenAt() != null ? LoanStatus.FORGIVEN : LoanStatus.UNPAID;
     }
 
     /** Whole days past the due date, counting a started day as a full one. */
-    static long overdueDays(Instant dueAt, Instant end) {
+    public static long overdueDays(Instant dueAt, Instant end) {
         if (!end.isAfter(dueAt)) {
             return 0;
         }
         return Math.ceilDiv(Duration.between(dueAt, end).toNanos(), DAY_NANOS);
     }
 
-    private static LoanResponse toResponse(Loan loan, Instant now) {
+    public static BigDecimal fine(Loan loan, Instant now) {
+        return FINE_PER_DAY.multiply(BigDecimal.valueOf(overdueDays(loan, now)));
+    }
+
+    public static LoanResponse toResponse(Loan loan, Instant now) {
         Book book = loan.getBook();
-        long days = overdueDays(loan.getDueAt(), loan.getReturnedAt() == null ? now : loan.getReturnedAt());
         return new LoanResponse(loan.getId(), book.getIsbn(), book.getTitle(), book.getAuthor(),
                 book.getGenre().getName(), loan.getBorrowedAt(), loan.getDueAt(), loan.getReturnedAt(),
-                status(loan, now), days, FINE_PER_DAY.multiply(BigDecimal.valueOf(days)));
+                status(loan, now), overdueDays(loan, now), fine(loan, now));
+    }
+
+    private static long overdueDays(Loan loan, Instant now) {
+        return overdueDays(loan.getDueAt(), loan.getReturnedAt() == null ? now : loan.getReturnedAt());
+    }
+
+    private Loan find(User user, Long loanId) {
+        return repository.findById(loanId)
+                .filter(found -> found.getUser().getId().equals(user.getId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Loan not found"));
     }
 
     /** Most frequent value, ties going to the alphabetically first; null when there are no loans. */

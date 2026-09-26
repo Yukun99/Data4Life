@@ -18,7 +18,9 @@ declares none.
 - `features/` — cross-page chrome (navigation, footer)
 - `store/` — the Redux Toolkit store, its typed hooks (`useAppDispatch`, `useAppSelector`) and
   slices
-- `common/` — reusable components, hooks, utils; it must not import from `store/`
+- `common/` — reusable components, hooks, utils and shared types; it must not import from `store/`.
+  `common/utils/format.ts` holds the money, date and day formatters and the loan status labels and
+  chip colours used by the profile and users pages.
 
 Imports only point downwards through the layers `app/` → `pages/` → `features/` → `store/` →
 `common/`.
@@ -50,23 +52,31 @@ cycles. Only `app/` exists at first; create the others when something belongs th
   `/users` and `/catalogue` are also wrapped in `app/require-admin.tsx`, which sends non-admins to
   `/`. Unknown paths go to `/`.
 - `/profile` has two columns that stack on narrow screens. The left holds the profile card (edit
-  name and icon) and the interests card (genres and languages, at most 10, with a first-time dialog
+  name and icon; the edit dialog also has a Delete account button with a confirm step that calls
+  `DELETE /api/auth/me` through the `deleteAccount` thunk and, on success, clears the user so the
+  guard sends them to `/login`) and the interests card (genres and languages, at most 10, with a first-time dialog
   that can be skipped). The right holds the History / Payments panel with loan stats, statuses and
-  fine payments. The loan history, its loading and error state and the `fetchHistory`,
+  fine payments; a fine an admin forgave shows a Forgiven chip and no Pay button. The `Loan` and
+  `LoanStatus` types live in `common/types.ts` and are re-exported by the history slice. The loan
+  history, its loading and error state and the `fetchHistory`,
   `payLoan` and `payAllFines` thunks live in the `history` slice (`store/history-slice.ts`);
   `pages/profile/hooks/use-history.ts` only dispatches them. The profile card and interests keep
   their form state in page-local hooks under `pages/profile/hooks/`.
-- `/catalogue` is the admin book table. Paging, sorting and filtering all happen on the backend;
-  the page only sends the page, size, sort and filter values. The list, those values and the
-  filter options live in the `catalogue` slice (`store/catalogue-slice.ts`), which also holds the
-  thunks for every `/api/books` call. `buildQuery` writes the query string in a fixed order
-  (`page`, `size`, `sort`, `dir`, then set filters in column order), so specs can stub exact URLs.
-  The add, edit, merge and delete dialogs keep their form state in hooks under
-  `pages/catalogue/hooks/` and reload the list after a change. The table uses a fixed layout and
-  is always full width: column widths live in the slice (`columnWidths`, percentages summing to
-  100). Dragging a divider in the header row (`use-column-resize.ts`) moves width between the two
-  neighbouring columns, and overflowing cell text is cut with an ellipsis. The widths are loaded
-  from and saved to `/api/catalogue/columns` (per admin user) so they survive reloads.
+- `/catalogue` is the admin book table, built on the data table framework described below. The
+  list, the page, size, sort and filter values and the filter options live in the `catalogue` slice
+  (`store/catalogue-slice.ts`), which also holds the thunks for every `/api/books` call. The add,
+  edit, merge and delete dialogs keep their form state in hooks under `pages/catalogue/hooks/` and
+  reload the list after a change. `book-table.tsx` holds the column list and calls
+  `use-catalogue-columns.ts`, which loads and saves the column widths at `/api/catalogue/columns`.
+- `/users` is the admin user table, also built on the data table framework. Each row shows the
+  name and email, admin flag, join date, total and current borrows and total and current fines.
+  Row actions promote a user, demote an admin, delete a user (each enabled only when the backend's
+  `demotable` or `deletable` flag says the current admin may) and open a fines dialog where unpaid
+  fines can be forgiven one loan at a time. Promote, demote and delete share one confirm dialog
+  (`action-dialog.tsx`, driven by `use-user-action.ts`). The `users` slice (`store/users-slice.ts`) holds the list, its query values, the
+  column widths (saved at `/api/admin/users/columns`), the open user's fines and the thunks for
+  every `/api/admin/users` call. The action and fines dialogs keep their local state in hooks under
+  `pages/users/hooks/` and reload the list after a change.
 - `features/navigation/` holds the header (menu button, `Library` title, theme toggle), the nav
   drawer and `pages.ts`, the list of pages with their labels, icons and admin flag.
   `app/document-title.tsx` sets the tab title to `Library - <Page>` from that list.
@@ -80,6 +90,32 @@ cycles. Only `app/` exists at first; create the others when something belongs th
   `GET /api/auth/me` on start) and offers the `login`, `updateProfile` and `logout` thunks and the `selectUser`,
   `selectUserLoading` and `selectIsAdmin` selectors. Call the backend through `apiFetch` in
   `common/utils/api.ts`, which throws an `ApiError` carrying the backend's message.
+
+## Data Tables
+
+`common/components/data-table/` is a reusable, store-free table framework; a page supplies the data
+and callbacks through props. Paging, sorting and filtering all happen on the backend, so a page only
+sends the page, size, sort and filter values.
+
+- `data-table.tsx` renders a full-width, fixed-layout MUI table from a list of column specs
+  (`types.ts`). A column has one or more stacked headers, each optionally sortable, and either
+  `lines` (stacked values: the first in the normal colour, the rest in the secondary colour, cut
+  with an ellipsis) or a custom `render`. It also shows the error, loading and empty rows, with test
+  ids `<prefix>-error`, `<prefix>-loading` and `<prefix>-empty`.
+- Clicking a single header cycles its sort ascending, descending, off (`cycleSort` in `sort.ts`).
+  In a stacked header, clicking the other key while a sort is active switches to it and keeps the
+  direction (`keepDirSort`).
+- Column widths are percentages summing to 100. Dragging the divider on the right of a header
+  (`use-column-resize.ts`) moves width between that column and the next, never below 5% each, and
+  reports the final widths once on release so the page can save them.
+- `table-toolbar.tsx` (filter button with an active filter count, page size select and an optional
+  slot for extra buttons), `table-pagination.tsx` and `filter-dialog.tsx` (one exact-match dropdown
+  per field) complete a page. `buildQuery` (`build-query.ts`) writes the list query string in a
+  fixed order (`page`, `size`, `sort`, `dir`, then set filters in the given key order) so specs can
+  stub exact URLs.
+- To add a table page: define its column keys, default widths, sort keys and filter keys in a slice
+  with the same reducers as the catalogue or users slice, write the column specs in a page
+  component, and pass the slice values and actions to these components.
 
 ## Tests
 

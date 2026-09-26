@@ -1,21 +1,8 @@
+import { Loan, LoanStatus } from '@/common/types';
 import { apiFetch, errorMessage } from '@/common/utils/api';
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 
-export type LoanStatus = 'BORROWED' | 'RETURNED' | 'OVERDUE' | 'UNPAID' | 'PAID';
-
-export type Loan = {
-  id: number;
-  isbn: string;
-  title: string;
-  author: string;
-  genre: string;
-  borrowedAt: string;
-  dueAt: string;
-  returnedAt: string | null;
-  status: LoanStatus;
-  overdueDays: number;
-  fine: number;
-};
+export type { Loan, LoanStatus };
 
 export type HistoryStats = {
   booksBorrowed: number;

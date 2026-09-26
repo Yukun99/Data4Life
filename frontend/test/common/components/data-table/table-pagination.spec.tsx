@@ -1,14 +1,21 @@
-import CataloguePagination from '@/pages/catalogue/components/catalogue-pagination';
+import TablePagination from '@/common/components/data-table/table-pagination';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const renderPagination = (page: number, totalPages: number) => {
   const onGoTo = vi.fn();
-  render(<CataloguePagination page={page} totalPages={totalPages} onGoTo={onGoTo} />);
+  render(
+    <TablePagination
+      page={page}
+      totalPages={totalPages}
+      onGoTo={onGoTo}
+      testIdPrefix="catalogue"
+    />,
+  );
   return onGoTo;
 };
 
-describe('CataloguePagination', () => {
+describe('TablePagination', () => {
   it('disables first and previous on the first page', () => {
     renderPagination(0, 3);
 

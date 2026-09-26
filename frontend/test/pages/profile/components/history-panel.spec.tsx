@@ -29,6 +29,7 @@ const loans: Loan[] = [
   loan(3, { status: 'RETURNED', returnedAt: iso(-5) }),
   loan(4, { status: 'UNPAID', returnedAt: iso(-20), overdueDays: 6, fine: 6 }),
   loan(5, { status: 'PAID', returnedAt: iso(-40), overdueDays: 2, fine: 2 }),
+  loan(6, { status: 'FORGIVEN', returnedAt: iso(-50), overdueDays: 3, fine: 3 }),
 ];
 
 const history: History = {
@@ -70,6 +71,9 @@ describe('HistoryPanel', () => {
     expect(screen.getByTestId('loan-pay-4')).toBeInTheDocument();
     expect(screen.getByTestId('loan-status-5')).toHaveTextContent('Paid');
     expect(screen.getByTestId('loan-detail-5')).toHaveTextContent('$2.00 paid');
+    expect(screen.getByTestId('loan-status-6')).toHaveTextContent('Forgiven');
+    expect(screen.getByTestId('loan-detail-6')).toHaveTextContent('3 days late · $3.00 forgiven');
+    expect(screen.queryByTestId('loan-pay-6')).not.toBeInTheDocument();
   });
 
   it('pays one loan and shows the refreshed history', async () => {

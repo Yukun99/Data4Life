@@ -1,3 +1,6 @@
+import { buildQuery } from '@/common/components/data-table/build-query';
+import { cycleSort, keepDirSort } from '@/common/components/data-table/sort';
+import { SortState } from '@/common/components/data-table/types';
 import { NamedItem } from '@/common/types';
 import { ApiError, apiFetch, errorMessage } from '@/common/utils/api';
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
@@ -51,7 +54,7 @@ export type BookRequest = {
 
 export type SortKey = 'isbn' | 'title' | 'author' | 'genre' | 'language' | 'amount' | 'stock';
 
-export type Sort = { key: SortKey; dir: 'asc' | 'desc' } | null;
+export type Sort = SortState<SortKey>;
 
 export type RequestFailure = { status: number; message: string };
 
@@ -68,8 +71,6 @@ export const COLUMN_ORDER: ColumnKey[] = [
   'actions',
 ];
 
-export const MIN_COLUMN_PERCENT = 5;
-
 export const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
   isbn: 14,
   titleAuthor: 34,
@@ -78,23 +79,6 @@ export const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
   stock: 10,
   actions: 12,
 };
-
-type ResizeColumnsParams = { widths: ColumnWidths; key: ColumnKey; delta: number };
-
-/** Moves `delta` percent from the column after `key` into `key`, keeping both above the minimum. */
-export const resizeColumns = ({ widths, key, delta }: ResizeColumnsParams): ColumnWidths => {
-  const next = COLUMN_ORDER[COLUMN_ORDER.indexOf(key) + 1];
-  if (!next) {
-    return widths;
-  }
-  const left = widths[key];
-  const right = widths[next];
-  const applied = Math.max(MIN_COLUMN_PERCENT - left, Math.min(delta, right - MIN_COLUMN_PERCENT));
-  const tenth = (value: number) => Math.round(value * 10) / 10;
-  return { ...widths, [key]: tenth(left + applied), [next]: tenth(right - applied) };
-};
-
-export const PAGE_SIZES = [10, 20, 50];
 
 export const FILTER_KEYS: (keyof BookFilter)[] = [
   'isbn',
@@ -144,19 +128,6 @@ const initialState: CatalogueState = {
   columnWidths: DEFAULT_COLUMN_WIDTHS,
 };
 
-type BuildQueryParams = Pick<CatalogueState, 'page' | 'size' | 'sort' | 'filter'>;
-
-/** Builds the list query string in a fixed order: page, size, sort, dir, then set filters. */
-export const buildQuery = ({ page, size, sort, filter }: BuildQueryParams) => {
-  const params = new URLSearchParams({ page: String(page), size: String(size) });
-  if (sort) {
-    params.append('sort', sort.key);
-    params.append('dir', sort.dir);
-  }
-  FILTER_KEYS.filter((key) => filter[key] !== '').forEach((key) => params.append(key, filter[key]));
-  return params.toString();
-};
-
 type State = { catalogue: CatalogueState };
 
 const bookPath = (isbn: string) => `/api/books/${encodeURIComponent(isbn)}`;
@@ -170,7 +141,7 @@ export const fetchBooks = createAsyncThunk<
   { state: State; rejectValue: string }
 >('catalogue/fetchBooks', async (_, { getState, rejectWithValue }) => {
   try {
-    return await apiFetch<BooksResponse>(`/api/books?${buildQuery(getState().catalogue)}`);
+    return await apiFetch<BooksResponse>(`/api/books?${buildQuery({ ...getState().catalogue, filterKeys: FILTER_KEYS })}`);
   } catch (err) {
     return rejectWithValue(errorMessage(err));
   }
@@ -278,16 +249,11 @@ const catalogueSlice = createSlice({
       state.page = 0;
     },
     toggleSort: (state, action: PayloadAction<SortKey>) => {
-      const key = action.payload;
-      if (state.sort?.key !== key) {
-        state.sort = { key, dir: 'asc' };
-      } else {
-        state.sort = state.sort.dir === 'asc' ? { key, dir: 'desc' } : null;
-      }
+      state.sort = cycleSort(state.sort, action.payload);
       state.page = 0;
     },
     switchSort: (state, action: PayloadAction<SortKey>) => {
-      state.sort = { key: action.payload, dir: state.sort?.dir ?? 'asc' };
+      state.sort = keepDirSort(state.sort, action.payload);
       state.page = 0;
     },
     setColumnWidths: (state, action: PayloadAction<ColumnWidths>) => {

@@ -1,17 +1,17 @@
-import { Sort, SortKey } from '@/store/catalogue-slice';
+import { SortState } from '@/common/components/data-table/types';
 import ArrowDropDown from '@mui/icons-material/ArrowDropDown';
 import ArrowDropUp from '@mui/icons-material/ArrowDropUp';
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 
-type SortLabelProps = {
+type SortLabelProps<S extends string> = {
   label: string;
-  sortKey: SortKey;
-  sort: Sort;
-  onClick: (key: SortKey) => void;
+  sortKey: S;
+  sort: SortState<S>;
+  onClick: (key: S) => void;
 };
 
-const SortLabel = ({ label, sortKey, sort, onClick }: SortLabelProps) => {
+const SortLabel = <S extends string>({ label, sortKey, sort, onClick }: SortLabelProps<S>) => {
   const dir = sort?.key === sortKey ? sort.dir : null;
   const arrow = { fontSize: 18, my: '-6px' };
   return (
