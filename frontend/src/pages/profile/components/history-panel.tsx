@@ -1,3 +1,4 @@
+import ConfirmDialog from '@/common/components/confirm-dialog';
 import LoanRow from '@/pages/profile/components/loan-row';
 import useHistory from '@/pages/profile/hooks/use-history';
 import { formatMoney } from '@/common/utils/format';
@@ -13,8 +14,23 @@ import Typography from '@mui/material/Typography';
 import { Fragment } from 'react';
 
 const HistoryPanel = () => {
-  const { history, loading, error, payingId, payingAll, pay, payAll } = useHistory();
+  const {
+    history,
+    loading,
+    error,
+    payingId,
+    payingAll,
+    pending,
+    askPay,
+    askPayAll,
+    cancel,
+    confirm,
+  } = useHistory();
   const stats = history?.stats;
+  const pendingTitle =
+    pending === 'all'
+      ? `Pay all fines (${formatMoney(stats?.totalOverdueFines ?? 0)})?`
+      : `Pay ${formatMoney(pending?.fine ?? 0)} fine for ${pending?.title}?`;
 
   const statItems = stats
     ? [
@@ -34,7 +50,7 @@ const HistoryPanel = () => {
       <Typography variant="h6" component="h2" gutterBottom>
         History
       </Typography>
-      {error && (
+      {error && !pending && (
         <Alert severity="error" sx={{ mb: 2 }} data-testid="history-error">
           {error}
         </Alert>
@@ -66,7 +82,7 @@ const HistoryPanel = () => {
               variant="contained"
               disabled={history.stats.totalOverdueFines <= 0}
               loading={payingAll}
-              onClick={payAll}
+              onClick={askPayAll}
               data-testid="history-pay-all"
             >
               Pay all
@@ -82,13 +98,24 @@ const HistoryPanel = () => {
               {history.loans.map((loan, index) => (
                 <Fragment key={loan.id}>
                   {index > 0 && <Divider component="li" />}
-                  <LoanRow loan={loan} paying={payingId === loan.id} onPay={pay} />
+                  <LoanRow loan={loan} paying={payingId === loan.id} onPay={askPay} />
                 </Fragment>
               ))}
             </List>
           )}
         </>
       )}
+      <ConfirmDialog
+        open={!!pending}
+        title={pendingTitle}
+        body="This records the payment on your account."
+        confirmLabel="Pay"
+        error={error}
+        loading={pending === 'all' ? payingAll : payingId !== null}
+        onCancel={cancel}
+        onConfirm={confirm}
+        testIdPrefix="pay"
+      />
     </Paper>
   );
 };

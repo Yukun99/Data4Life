@@ -183,10 +183,11 @@ public class AdminUserService {
     }
 
     private AdminUserResponse row(User user, User caller) {
-        return row(user, loanRepository.findByUserOrderByBorrowedAtDesc(user), Instant.now(), caller);
+        return row(user, loanRepository.findByUserNewestFirst(user), Instant.now(), caller);
     }
 
-    private AdminUserResponse row(User user, List<Loan> loans, Instant now, User caller) {
+    private AdminUserResponse row(User user, List<Loan> all, Instant now, User caller) {
+        List<Loan> loans = all.stream().filter(loan -> loan.getBorrowedAt() != null).toList();
         int current = (int) loans.stream().filter(loan -> loan.getReturnedAt() == null).count();
         BigDecimal totalFines = ZERO;
         BigDecimal currentFines = ZERO;
@@ -210,12 +211,16 @@ public class AdminUserService {
         return userService.isRoot(caller) || caller.getId().equals(target.getPromotedById());
     }
 
-    /** Refuses while books are out or fines unpaid; otherwise removes the user with their loans and interests. */
+    /** Refuses while books are out, reserved or fines unpaid; otherwise removes the user with their loans and interests. */
     private void remove(User user) {
-        List<Loan> loans = loanRepository.findByUserOrderByBorrowedAtDesc(user);
+        loanService.releaseExpired();
+        List<Loan> loans = loanRepository.findByUserNewestFirst(user);
         Instant now = Instant.now();
-        if (loans.stream().anyMatch(loan -> loan.getReturnedAt() == null)) {
+        if (loans.stream().anyMatch(loan -> loan.getBorrowedAt() != null && loan.getReturnedAt() == null)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "User still has books on loan");
+        }
+        if (loans.stream().anyMatch(LoanService::isHolding)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User still has a reservation");
         }
         if (loans.stream().anyMatch(loan -> LoanService.status(loan, now) == LoanStatus.UNPAID)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "User still has unpaid fines");

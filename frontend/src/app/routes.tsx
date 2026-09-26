@@ -8,7 +8,6 @@ import CreatePage from '@/pages/create/create-page';
 import HomePage from '@/pages/home/home-page';
 import LoginPage from '@/pages/login/login-page';
 import ProfilePage from '@/pages/profile/profile-page';
-import ReservePage from '@/pages/reserve/reserve-page';
 import ReturnPage from '@/pages/return/return-page';
 import UsersPage from '@/pages/users/users-page';
 import { useAppDispatch } from '@/store/hooks';
@@ -36,7 +35,6 @@ const AppRoutes = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/borrow" element={<BorrowPage />} />
             <Route path="/return" element={<ReturnPage />} />
-            <Route path="/reserve" element={<ReservePage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route element={<RequireAdmin />}>
               <Route path="/users" element={<UsersPage />} />

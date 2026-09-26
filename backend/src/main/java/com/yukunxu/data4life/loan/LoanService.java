@@ -1,6 +1,7 @@
 package com.yukunxu.data4life.loan;
 
 import com.yukunxu.data4life.catalogue.Book;
+import com.yukunxu.data4life.catalogue.BookRepository;
 import com.yukunxu.data4life.user.User;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -20,20 +21,31 @@ public class LoanService {
 
     public static final int LOAN_DAYS = 14;
     public static final BigDecimal FINE_PER_DAY = new BigDecimal("1.00");
+    public static final int RESERVE_DAYS = 7;
+    public static final BigDecimal RESERVE_FEE = new BigDecimal("5.00");
+    public static final int MAX_HOLDINGS = 8;
+    public static final String UNPAID_BLOCK = "You have unpaid fines";
+    public static final String OVERDUE_BLOCK = "You have an overdue book";
+    public static final String FULL_BLOCK = "You already hold " + MAX_HOLDINGS + " books";
 
+    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2);
     private static final long DAY_NANOS = Duration.ofDays(1).toNanos();
 
     private final LoanRepository repository;
+    private final BookRepository bookRepository;
 
-    public LoanService(LoanRepository repository) {
+    public LoanService(LoanRepository repository, BookRepository bookRepository) {
         this.repository = repository;
+        this.bookRepository = bookRepository;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public HistoryResponse history(User user) {
+        releaseExpired();
         Instant now = Instant.now();
-        List<Loan> loans = repository.findByUserOrderByBorrowedAtDesc(user);
-        List<LoanResponse> rows = loans.stream().map(loan -> toResponse(loan, now)).toList();
+        List<Loan> all = repository.findByUserNewestFirst(user);
+        List<LoanResponse> rows = all.stream().map(loan -> toResponse(loan, now)).toList();
+        List<Loan> loans = all.stream().filter(loan -> loan.getBorrowedAt() != null).toList();
         BigDecimal total = rows.stream()
                 .filter(row -> row.status() == LoanStatus.UNPAID)
                 .map(LoanResponse::fine)
@@ -58,7 +70,7 @@ public class LoanService {
     @Transactional
     public void payAll(User user) {
         Instant now = Instant.now();
-        repository.findByUserOrderByBorrowedAtDesc(user).stream()
+        repository.findByUserNewestFirst(user).stream()
                 .filter(loan -> status(loan, now) == LoanStatus.UNPAID)
                 .forEach(loan -> loan.setFinePaidAt(now));
     }
@@ -66,7 +78,7 @@ public class LoanService {
     @Transactional(readOnly = true)
     public List<LoanResponse> finedLoans(User user) {
         Instant now = Instant.now();
-        return repository.findByUserOrderByBorrowedAtDesc(user).stream()
+        return repository.findByUserNewestFirst(user).stream()
                 .filter(loan -> fine(loan, now).signum() > 0)
                 .map(loan -> toResponse(loan, now))
                 .toList();
@@ -82,7 +94,42 @@ public class LoanService {
         loan.setFineForgivenAt(now);
     }
 
+    /** Puts the copies of expired, unreleased reservations back into stock, exactly once each. */
+    @Transactional
+    public void releaseExpired() {
+        Instant now = Instant.now();
+        for (Loan loan : repository.lockExpiredReservations(now)) {
+            loan.setReleasedAt(now);
+            Book book = bookRepository.lockByIsbn(loan.getBook().getIsbn()).orElseThrow();
+            book.setStock(Math.min(book.getAmount(), book.getStock() + 1));
+        }
+    }
+
+    /** Why the user may not borrow or reserve right now, or null when they may. Expects released reservations. */
+    public String borrowBlock(User user, Instant now) {
+        List<Loan> loans = repository.findByUserNewestFirst(user);
+        if (loans.stream().anyMatch(loan -> status(loan, now) == LoanStatus.UNPAID)) {
+            return UNPAID_BLOCK;
+        }
+        if (loans.stream().anyMatch(loan -> status(loan, now) == LoanStatus.OVERDUE)) {
+            return OVERDUE_BLOCK;
+        }
+        if (loans.stream().filter(LoanService::isHolding).count() >= MAX_HOLDINGS) {
+            return FULL_BLOCK;
+        }
+        return null;
+    }
+
+    /** An open loan or an unreleased reservation; only exact once {@link #releaseExpired()} has run. */
+    public static boolean isHolding(Loan loan) {
+        return loan.getReturnedAt() == null && loan.getReleasedAt() == null;
+    }
+
     public static LoanStatus status(Loan loan, Instant now) {
+        if (loan.getBorrowedAt() == null) {
+            boolean expired = loan.getReleasedAt() != null || now.isAfter(loan.getReservedUntil());
+            return expired ? LoanStatus.EXPIRED : LoanStatus.RESERVED;
+        }
         if (loan.getReturnedAt() == null) {
             return now.isAfter(loan.getDueAt()) ? LoanStatus.OVERDUE : LoanStatus.BORROWED;
         }
@@ -111,10 +158,14 @@ public class LoanService {
         Book book = loan.getBook();
         return new LoanResponse(loan.getId(), book.getIsbn(), book.getTitle(), book.getAuthor(),
                 book.getGenre().getName(), loan.getBorrowedAt(), loan.getDueAt(), loan.getReturnedAt(),
-                status(loan, now), overdueDays(loan, now), fine(loan, now));
+                status(loan, now), overdueDays(loan, now), fine(loan, now), loan.getReservedAt(),
+                loan.getReservedUntil(), loan.getReservedAt() != null ? RESERVE_FEE : ZERO);
     }
 
     private static long overdueDays(Loan loan, Instant now) {
+        if (loan.getBorrowedAt() == null) {
+            return 0;
+        }
         return overdueDays(loan.getDueAt(), loan.getReturnedAt() == null ? now : loan.getReturnedAt());
     }
 

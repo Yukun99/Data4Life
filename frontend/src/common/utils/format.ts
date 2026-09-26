@@ -20,6 +20,8 @@ export const statusLabel: Record<LoanStatus, string> = {
   UNPAID: 'Unpaid',
   PAID: 'Paid',
   FORGIVEN: 'Forgiven',
+  RESERVED: 'Reserved',
+  EXPIRED: 'Expired',
 };
 
 export const chipColor: Record<LoanStatus, ChipProps['color']> = {
@@ -29,4 +31,6 @@ export const chipColor: Record<LoanStatus, ChipProps['color']> = {
   UNPAID: 'warning',
   PAID: 'default',
   FORGIVEN: 'info',
+  RESERVED: 'secondary',
+  EXPIRED: 'default',
 };

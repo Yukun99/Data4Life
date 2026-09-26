@@ -1,7 +1,9 @@
+import ConfirmDialog from '@/common/components/confirm-dialog';
 import FilterDialog from '@/common/components/data-table/filter-dialog';
 import TablePagination from '@/common/components/data-table/table-pagination';
 import TableToolbar from '@/common/components/data-table/table-toolbar';
 import { PAGE_SIZES } from '@/common/components/data-table/types';
+import { formatMoney } from '@/common/utils/format';
 import ActionDialog from '@/pages/users/components/action-dialog';
 import FinesDialog from '@/pages/users/components/fines-dialog';
 import UserTable from '@/pages/users/components/user-table';
@@ -77,8 +79,20 @@ const UsersPage = () => {
         loading={fines.loading}
         error={fines.error}
         forgivingId={fines.forgivingId}
-        onForgive={fines.forgive}
+        onForgive={fines.askForgive}
         onClose={fines.close}
+      />
+      <ConfirmDialog
+        open={!!fines.confirming}
+        title={`Forgive ${formatMoney(fines.confirming?.fine ?? 0)} fine for ${fines.confirming?.title}?`}
+        body={`${fines.target?.name} will no longer owe this fine.`}
+        confirmLabel="Forgive"
+        color="warning"
+        error={fines.error}
+        loading={fines.forgivingId !== null}
+        onCancel={fines.cancelForgive}
+        onConfirm={fines.confirmForgive}
+        testIdPrefix="forgive"
       />
     </Box>
   );

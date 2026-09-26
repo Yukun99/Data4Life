@@ -1,6 +1,6 @@
 import HistoryPanel from '@/pages/profile/components/history-panel';
 import { History, Loan } from '@/store/history-slice';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import mockFetch from '../../../mock-fetch';
 import withStore from '../../../with-store';
@@ -16,10 +16,13 @@ const loan = (id: number, overrides: Partial<Loan>): Loan => ({
   genre: 'Fantasy',
   borrowedAt: iso(-10),
   dueAt: iso(4),
+  reservedAt: null,
+  reservedUntil: null,
   returnedAt: null,
   status: 'BORROWED',
   overdueDays: 0,
   fine: 0,
+  fee: 0,
   ...overrides,
 });
 
@@ -30,6 +33,22 @@ const loans: Loan[] = [
   loan(4, { status: 'UNPAID', returnedAt: iso(-20), overdueDays: 6, fine: 6 }),
   loan(5, { status: 'PAID', returnedAt: iso(-40), overdueDays: 2, fine: 2 }),
   loan(6, { status: 'FORGIVEN', returnedAt: iso(-50), overdueDays: 3, fine: 3 }),
+  loan(7, {
+    status: 'RESERVED',
+    borrowedAt: null,
+    dueAt: null,
+    reservedAt: '2026-03-01T00:00:00Z',
+    reservedUntil: '2026-03-08T00:00:00Z',
+    fee: 5,
+  }),
+  loan(8, {
+    status: 'EXPIRED',
+    borrowedAt: null,
+    dueAt: null,
+    reservedAt: '2026-02-01T00:00:00Z',
+    reservedUntil: '2026-02-08T00:00:00Z',
+    fee: 5,
+  }),
 ];
 
 const history: History = {
@@ -76,6 +95,24 @@ describe('HistoryPanel', () => {
     expect(screen.queryByTestId('loan-pay-6')).not.toBeInTheDocument();
   });
 
+  it('shows reserved and expired reservations with their fee', async () => {
+    mockFetch({ 'GET /api/loans': { status: 200, body: history } });
+    render(withStore(<HistoryPanel />).ui);
+
+    const reservedDate = new Date('2026-03-01T00:00:00Z').toLocaleDateString();
+    const untilDate = new Date('2026-03-08T00:00:00Z').toLocaleDateString();
+    expect(await screen.findByTestId('loan-status-7')).toHaveTextContent('Reserved');
+    expect(screen.getByTestId('loan-detail-7')).toHaveTextContent(
+      `Reserved until ${untilDate} · $5.00 fee paid`,
+    );
+    expect(screen.getByTestId('loan-row-7')).toHaveTextContent(`Reserved ${reservedDate}`);
+    expect(screen.getByTestId('loan-status-8')).toHaveTextContent('Expired');
+    expect(screen.getByTestId('loan-detail-8')).toHaveTextContent(
+      'Reservation expired · $5.00 fee paid',
+    );
+    expect(screen.queryByTestId('loan-pay-7')).not.toBeInTheDocument();
+  });
+
   it('pays one loan and shows the refreshed history', async () => {
     const fetchMock = mockFetch({
       'GET /api/loans': { status: 200, body: history },
@@ -84,7 +121,11 @@ describe('HistoryPanel', () => {
     render(withStore(<HistoryPanel />).ui);
 
     await userEvent.click(await screen.findByTestId('loan-pay-4'));
+    expect(screen.getByTestId('pay-dialog')).toHaveTextContent('Pay $6.00 fine for Book 4?');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/loans/4/pay', expect.anything());
+    await userEvent.click(screen.getByTestId('pay-confirm'));
 
+    await waitFor(() => expect(screen.queryByTestId('pay-dialog')).not.toBeInTheDocument());
     expect(await screen.findByTestId('history-stat-fines')).toHaveTextContent('$0.00');
     expect(screen.getByTestId('loan-status-4')).toHaveTextContent('Paid');
     expect(screen.queryByTestId('loan-pay-4')).not.toBeInTheDocument();
@@ -103,12 +144,30 @@ describe('HistoryPanel', () => {
     render(withStore(<HistoryPanel />).ui);
 
     await userEvent.click(await screen.findByTestId('history-pay-all'));
+    expect(screen.getByTestId('pay-dialog')).toHaveTextContent('Pay all fines ($6.00)?');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/loans/pay-all', expect.anything());
+    await userEvent.click(screen.getByTestId('pay-confirm'));
 
     expect(await screen.findByText('$0.00')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/loans/pay-all',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('does nothing when a payment is cancelled', async () => {
+    const fetchMock = mockFetch({ 'GET /api/loans': { status: 200, body: history } });
+    render(withStore(<HistoryPanel />).ui);
+
+    await userEvent.click(await screen.findByTestId('loan-pay-4'));
+    await userEvent.click(screen.getByTestId('pay-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('pay-dialog')).not.toBeInTheDocument());
+    await userEvent.click(screen.getByTestId('history-pay-all'));
+    await userEvent.click(screen.getByTestId('pay-cancel'));
+
+    await waitFor(() => expect(screen.queryByTestId('pay-dialog')).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('loan-status-4')).toHaveTextContent('Unpaid');
   });
 
   it('shows the pay error and keeps the history', async () => {
@@ -119,8 +178,12 @@ describe('HistoryPanel', () => {
     render(withStore(<HistoryPanel />).ui);
 
     await userEvent.click(await screen.findByTestId('loan-pay-4'));
+    await userEvent.click(screen.getByTestId('pay-confirm'));
 
-    expect(await screen.findByTestId('history-error')).toHaveTextContent('Nothing to pay');
+    expect(await screen.findByTestId('pay-error')).toHaveTextContent('Nothing to pay');
+    expect(screen.getByTestId('pay-dialog')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('pay-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('pay-dialog')).not.toBeInTheDocument());
     expect(screen.getByTestId('loan-pay-4')).toBeEnabled();
     expect(screen.getByTestId('history-stat-fines')).toHaveTextContent('$6.00');
   });

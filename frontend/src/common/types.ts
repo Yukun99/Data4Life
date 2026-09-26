@@ -3,7 +3,15 @@ export type NamedItem = {
   name: string;
 };
 
-export type LoanStatus = 'BORROWED' | 'RETURNED' | 'OVERDUE' | 'UNPAID' | 'PAID' | 'FORGIVEN';
+export type LoanStatus =
+  | 'BORROWED'
+  | 'RETURNED'
+  | 'OVERDUE'
+  | 'UNPAID'
+  | 'PAID'
+  | 'FORGIVEN'
+  | 'RESERVED'
+  | 'EXPIRED';
 
 export type Loan = {
   id: number;
@@ -11,10 +19,13 @@ export type Loan = {
   title: string;
   author: string;
   genre: string;
-  borrowedAt: string;
-  dueAt: string;
+  borrowedAt: string | null;
+  dueAt: string | null;
+  reservedAt: string | null;
+  reservedUntil: string | null;
   returnedAt: string | null;
   status: LoanStatus;
   overdueDays: number;
   fine: number;
+  fee: number;
 };

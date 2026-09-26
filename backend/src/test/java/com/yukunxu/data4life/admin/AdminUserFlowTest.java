@@ -299,12 +299,38 @@ class AdminUserFlowTest {
         assertThat(userRepository.findByEmail("cal@example.com")).isEmpty();
         mockMvc.perform(get("/api/auth/me").session(calSession)).andExpect(status().isUnauthorized());
 
-        forgive(fay, loanRepository.findByUserOrderByBorrowedAtDesc(fay).getFirst()).andExpect(status().isOk());
+        forgive(fay, loanRepository.findByUserNewestFirst(fay).getFirst()).andExpect(status().isOk());
         remove(danSession, fay).andExpect(status().isNoContent());
         assertThat(loanRepository.existsByUser(fay)).isFalse();
 
         remove(root, bea).andExpect(status().isNoContent());
         assertThat(userRepository.findByEmail("bea@example.com")).isEmpty();
+    }
+
+    @Test
+    void reservationsAreNotBorrowsAndBlockDeletion() throws Exception {
+        signUp("Gus", "gus@example.com");
+        User gus = user("gus@example.com");
+        loan(gus, CHRISTIE, now.minus(days(3)), null, null, null);
+        Loan active = reserve(gus, SAPIENS, now.plus(days(3)));
+        reserve(gus, KOKORO, now.minus(Duration.ofHours(1)));
+
+        mockMvc.perform(get("/api/admin/users").param("email", "gus@example.com").session(root))
+                .andExpect(jsonPath("$.users[0].totalBorrows").value(1))
+                .andExpect(jsonPath("$.users[0].currentBorrows").value(1))
+                .andExpect(jsonPath("$.users[0].totalFines").value(0.0));
+
+        remove(root, gus).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("User still has books on loan"));
+        loanRepository.findByUserNewestFirst(gus).stream()
+                .filter(loan -> loan.getBorrowedAt() != null)
+                .forEach(loan -> loan.setReturnedAt(now));
+        remove(root, gus).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("User still has a reservation"));
+
+        active.setReservedUntil(now.minus(Duration.ofMinutes(1)));
+        remove(root, gus).andExpect(status().isNoContent());
+        assertThat(loanRepository.existsByUser(gus)).isFalse();
     }
 
     @Test
@@ -459,6 +485,11 @@ class AdminUserFlowTest {
         loan.setFinePaidAt(finePaidAt);
         loan.setFineForgivenAt(fineForgivenAt);
         return loanRepository.save(loan);
+    }
+
+    private Loan reserve(User user, String isbn, Instant reservedUntil) {
+        return loanRepository.save(Loan.reserved(user, bookRepository.findById(isbn).orElseThrow(),
+                reservedUntil.minus(days(LoanService.RESERVE_DAYS)), reservedUntil));
     }
 
     private User user(String email) {

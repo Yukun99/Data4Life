@@ -3,6 +3,7 @@ package com.yukunxu.data4life.loan;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.yukunxu.data4life.catalogue.Book;
 import com.yukunxu.data4life.catalogue.BookRepository;
 import com.yukunxu.data4life.user.User;
 import com.yukunxu.data4life.user.UserRepository;
@@ -26,6 +27,7 @@ class LoanServiceTest {
     private static final String CHRISTIE = "9780062693662";
     private static final String KOKORO = "9784101010137";
     private static final String RED_CHAMBER = "9787020002207";
+    private static final String DUNE = "9780441172719";
 
     @Autowired
     private LoanService loanService;
@@ -254,6 +256,91 @@ class LoanServiceTest {
         assertThat(overdue.getFinePaidAt()).isNull();
         assertThat(returned.getFinePaidAt()).isNull();
         assertThat(loanService.history(user).stats().totalOverdueFines()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void reservationIsReservedWithFeeAndNoFine() {
+        reserve(SAPIENS, now.plus(days(6)));
+
+        LoanResponse row = onlyRow();
+        assertThat(row.status()).isEqualTo(LoanStatus.RESERVED);
+        assertThat(row.borrowedAt()).isNull();
+        assertThat(row.dueAt()).isNull();
+        assertThat(row.overdueDays()).isZero();
+        assertThat(row.fine()).isEqualByComparingTo("0.00");
+        assertThat(row.fee()).isEqualByComparingTo("5.00");
+        HistoryStats stats = loanService.history(user).stats();
+        assertThat(stats.booksBorrowed()).isZero();
+        assertThat(stats.favouriteGenre()).isNull();
+    }
+
+    @Test
+    void reservationExpiresPastItsEndOrOnceReleased() {
+        Loan past = reserve(SAPIENS, now.minus(Duration.ofHours(1)));
+        Loan released = reserve(CHRISTIE, now.plus(days(3)));
+        released.setReleasedAt(now);
+
+        assertThat(LoanService.status(past, now)).isEqualTo(LoanStatus.EXPIRED);
+        assertThat(LoanService.status(released, now)).isEqualTo(LoanStatus.EXPIRED);
+        assertThat(LoanService.fine(past, now)).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void releaseExpiredRestoresStockOnce() {
+        Book dune = bookRepository.findById(DUNE).orElseThrow();
+        dune.setStock(1);
+        Loan expired = reserve(DUNE, now.minus(Duration.ofHours(1)));
+        Loan active = reserve(DUNE, now.plus(days(3)));
+
+        loanService.releaseExpired();
+        loanService.releaseExpired();
+
+        assertThat(expired.getReleasedAt()).isNotNull();
+        assertThat(active.getReleasedAt()).isNull();
+        assertThat(dune.getStock()).isEqualTo(2);
+        assertThat(LoanService.isHolding(expired)).isFalse();
+        assertThat(LoanService.isHolding(active)).isTrue();
+    }
+
+    @Test
+    void releaseNeverRaisesStockAboveAmount() {
+        Book dune = bookRepository.findById(DUNE).orElseThrow();
+        reserve(DUNE, now.minus(Duration.ofHours(1)));
+
+        loanService.releaseExpired();
+
+        assertThat(dune.getStock()).isEqualTo(dune.getAmount());
+    }
+
+    @Test
+    void borrowBlockReasonsInOrder() {
+        assertThat(loanService.borrowBlock(user, now)).isNull();
+
+        loan(SAPIENS, now.minus(days(20)), null, null);
+        assertThat(loanService.borrowBlock(user, now)).isEqualTo("You have an overdue book");
+
+        loan(CHRISTIE, now.minus(days(40)), now.minus(days(20)), null);
+        assertThat(loanService.borrowBlock(user, now)).isEqualTo("You have unpaid fines");
+    }
+
+    @Test
+    void borrowBlockAtEightHoldings() {
+        for (int i = 0; i < 7; i++) {
+            reserve(SAPIENS, now.plus(days(3)));
+        }
+        Loan expired = reserve(SAPIENS, now.minus(Duration.ofHours(1)));
+        loan(KOKORO, now.minus(days(30)), now.minus(days(25)), null);
+        loanService.releaseExpired();
+        assertThat(expired.getReleasedAt()).isNotNull();
+        assertThat(loanService.borrowBlock(user, now)).isNull();
+
+        loan(CHRISTIE, now.minus(days(2)), null, null);
+        assertThat(loanService.borrowBlock(user, now)).isEqualTo("You already hold 8 books");
+    }
+
+    private Loan reserve(String isbn, Instant reservedUntil) {
+        return loanRepository.save(Loan.reserved(user, bookRepository.findById(isbn).orElseThrow(),
+                reservedUntil.minus(days(LoanService.RESERVE_DAYS)), reservedUntil));
     }
 
     private Loan loan(String isbn, Instant borrowedAt, Instant returnedAt, Instant finePaidAt) {

@@ -1,3 +1,4 @@
+import { borrowReducer } from '@/store/borrow-slice';
 import { catalogueReducer } from '@/store/catalogue-slice';
 import { historyReducer } from '@/store/history-slice';
 import { userReducer } from '@/store/user-slice';
@@ -9,6 +10,7 @@ const rootReducer = combineReducers({
   catalogue: catalogueReducer,
   history: historyReducer,
   users: usersReducer,
+  borrow: borrowReducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;

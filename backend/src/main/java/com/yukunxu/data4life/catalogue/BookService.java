@@ -2,6 +2,7 @@ package com.yukunxu.data4life.catalogue;
 
 import com.yukunxu.data4life.interest.NamedItem;
 import com.yukunxu.data4life.loan.LoanRepository;
+import com.yukunxu.data4life.loan.LoanService;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,17 +30,27 @@ public class BookService {
     private final GenreRepository genreRepository;
     private final LanguageRepository languageRepository;
     private final LoanRepository loanRepository;
+    private final LoanService loanService;
 
     public BookService(BookRepository bookRepository, GenreRepository genreRepository,
-            LanguageRepository languageRepository, LoanRepository loanRepository) {
+            LanguageRepository languageRepository, LoanRepository loanRepository, LoanService loanService) {
         this.bookRepository = bookRepository;
         this.genreRepository = genreRepository;
         this.languageRepository = languageRepository;
         this.loanRepository = loanRepository;
+        this.loanService = loanService;
     }
 
     @Transactional(readOnly = true)
     public BooksResponse list(BookFilter filter, int page, int size, String sort, String dir) {
+        Page<Book> result = page(filter, page, size, sort, dir);
+        return new BooksResponse(result.getContent().stream().map(BookResponse::from).toList(),
+                result.getNumber(), result.getTotalPages(), result.getTotalElements(), filterOptions());
+    }
+
+    /** Validates size and sort, then returns the requested page, clamped to the last one. */
+    @Transactional(readOnly = true)
+    public Page<Book> page(BookFilter filter, int page, int size, String sort, String dir) {
         if (!PAGE_SIZES.contains(size)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid page size");
         }
@@ -53,8 +64,7 @@ public class BookService {
         if (result.getTotalPages() > 0 && result.getNumber() >= result.getTotalPages()) {
             result = bookRepository.findAll(spec, PageRequest.of(result.getTotalPages() - 1, size, order));
         }
-        return new BooksResponse(result.getContent().stream().map(BookResponse::from).toList(),
-                result.getNumber(), result.getTotalPages(), result.getTotalElements(), filterOptions());
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -75,8 +85,9 @@ public class BookService {
 
     @Transactional
     public BookResponse update(String isbn, BookRequest request) {
+        loanService.releaseExpired();
         Book book = find(isbn);
-        int open = (int) loanRepository.countByBookAndReturnedAtIsNull(book);
+        int open = (int) loanRepository.countByBookAndReturnedAtIsNullAndReleasedAtIsNull(book);
         checkAmount(request.amount(), open);
         Genre genre = genre(request);
         Language language = language(request);
@@ -101,11 +112,12 @@ public class BookService {
         if (targetIsbn.equals(sourceIsbn)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot merge a book into itself");
         }
+        loanService.releaseExpired();
         Book source = find(sourceIsbn);
         Book target = bookRepository.findById(targetIsbn)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Merge target not found"));
-        int open = (int) (loanRepository.countByBookAndReturnedAtIsNull(source)
-                + loanRepository.countByBookAndReturnedAtIsNull(target));
+        int open = (int) (loanRepository.countByBookAndReturnedAtIsNullAndReleasedAtIsNull(source)
+                + loanRepository.countByBookAndReturnedAtIsNullAndReleasedAtIsNull(target));
         checkAmount(request.amount(), open);
         Long genreId = genre(request).getId();
         Long languageId = language(request).getId();
@@ -154,7 +166,8 @@ public class BookService {
         };
     }
 
-    private FilterOptions filterOptions() {
+    @Transactional(readOnly = true)
+    public FilterOptions filterOptions() {
         return new FilterOptions(bookRepository.distinctIsbns(), bookRepository.distinctTitles(),
                 bookRepository.distinctAuthors(),
                 genreRepository.findAllByOrderByNameAsc().stream()

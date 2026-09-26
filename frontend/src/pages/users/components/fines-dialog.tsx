@@ -23,7 +23,7 @@ type FinesDialogProps = {
   loading: boolean;
   error: string;
   forgivingId: number | null;
-  onForgive: (loanId: number) => void;
+  onForgive: (loan: Loan) => void;
   onClose: () => void;
 };
 
@@ -83,7 +83,7 @@ const FinesDialog = ({
                       size="small"
                       variant="contained"
                       loading={forgivingId === loan.id}
-                      onClick={() => onForgive(loan.id)}
+                      onClick={() => onForgive(loan)}
                       data-testid={`fines-forgive-${loan.id}`}
                     >
                       Forgive

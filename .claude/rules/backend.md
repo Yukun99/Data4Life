@@ -21,7 +21,8 @@ paths:
   user (`/api/auth/*`), `catalogue/` holds the books, genres and languages tables and the admin book endpoints
   (`BookController`, `BookService`, `/api/books`),
   `interest/` holds a user's genre and language interests (`/api/interests`), `loan/` holds loans,
-  fines and payments (`/api/loans`), `admin/` holds the admin users page endpoints
+  reservations, fines and payments (`/api/loans`), `borrow/` holds the borrow page endpoints
+  (`BorrowController`, `BorrowService`, `/api/borrow`), `admin/` holds the admin users page endpoints
   (`AdminUserController`, `AdminUserService`, `/api/admin/users`), and `config/` holds the security setup and the JSON error
   handler. A new feature gets its own package with its controller, service, repository
   and entities together; cross-cutting configuration goes in a `config/` package when needed.
@@ -43,8 +44,8 @@ paths:
   with `403`, and logs the session out.
 - Public routes: `POST /api/users`, `POST /api/auth/login`, `GET /api/ping` and
   `/actuator/health`. Everything else needs a session and answers `401` without one, including
-  `PUT /api/users/me`, `/api/interests/**` and `/api/loans/**`; there are no login redirects or
-  forms.
+  `PUT /api/users/me`, `/api/interests/**`, `/api/loans/**` and `/api/borrow/**`, which any logged-in
+  user may call; there are no login redirects or forms.
 - `/api/books/**`, `/api/catalogue/**` and `/api/admin/**` are admin only, both as a URL rule in
   `SecurityConfig` and through `@PreAuthorize` on `BookController`, `ColumnController` and
   `AdminUserController`. Non-admins get
@@ -76,12 +77,20 @@ paths:
   the tables on the first `./mvnw spring-boot:run`.
 - Genres, languages and ten sample books are seeded by migrations. Loans last 14 days and overdue
   fines are $1.00 per started day (`LoanService`). A loan's status (borrowed, overdue, returned,
-  unpaid, paid, forgiven) and fine are derived from its dates and are never stored themselves. A
-  fine being paid or forgiven is stored as a timestamp (`fine_paid_at`, `fine_forgiven_at`); paid
-  wins when both are set.
-- A book's `stock` is always `amount` minus its open loans (loans with no return date). The
-  catalogue endpoints only take `amount` and recompute `stock`; an amount below the open loans is
-  rejected.
+  unpaid, paid, forgiven, reserved, expired) and fine are derived from its dates and are never stored
+  themselves. A fine being paid or forgiven is stored as a timestamp (`fine_paid_at`,
+  `fine_forgiven_at`); paid wins when both are set.
+- A reservation is a `loans` row with `reserved_at` and `reserved_until` set and no `borrowed_at`.
+  It holds a copy for 7 days and costs a $5.00 fee (`LoanService.RESERVE_FEE`), paid when reserving
+  and shown on the history row as `fee`; it is not a fine. Once `reserved_until` has passed it is
+  expired, and `released_at` records when its copy went back into stock, so that happens exactly
+  once. Borrowing a reserved book fills in `borrowed_at` and `due_at` on the same row.
+- A book's `stock` is always `amount` minus its holdings: open loans (no return date) plus
+  reservations not yet released. The catalogue endpoints only take `amount` and recompute `stock`;
+  an amount below the holdings is rejected.
+- Expired reservations are released whenever the borrow page, the history, a catalogue update or a
+  user delete needs exact numbers, and by `ReservationReleaser` every 10 minutes
+  (`@EnableScheduling`), so catalogue stock does not go stale when nobody opens those pages.
 
 ## Catalogue Endpoints
 
@@ -98,8 +107,23 @@ paths:
   percentages that must total 100, each at least 5). They are stored per user in
   `users.catalogue_columns` as a comma separated string; `GET` answers an empty body until the
   user has saved once.
-- `LoanSeeder` gives every user without loans five sample loans at startup, one per status. It
-  carries a `TODO` to remove it once the borrow and return flow creates real loans.
+
+## Borrow Endpoints
+
+- `GET /api/borrow` lists books for any logged-in user with the same paging, sorting and filter
+  parameters as `GET /api/books`, except that `amount` cannot be sorted on. Each book carries
+  `stock` and `holding` (`BORROWED` for an open loan, `RESERVED` for an active reservation, or
+  null). The response also carries `block`: null when the user may borrow, otherwise the reason
+  (unpaid fines, an overdue book, or already holding 8 books, checked in that order), and
+  `convertBlock`, the same reason except that holding 8 books does not stop a reservation being
+  borrowed, so the frontend can keep that one button enabled.
+- `POST /api/borrow/{isbn}` borrows a book for 14 days and `POST /api/borrow/{isbn}/reserve`
+  reserves it; both answer the updated book and `409` with a message when refused (already on loan,
+  already reserved, blocked, or out of stock). Borrowing a book the user has reserved turns the
+  reservation into a loan without touching stock, and the 8 book limit does not apply to that.
+  The book row is locked (`BookRepository.lockByIsbn`) so two users cannot take the last copy.
+- `GET` and `PUT /api/borrow/columns` store the user's borrow table column widths (five
+  percentages) in `users.borrow_columns`, the same way as the catalogue column widths.
 
 ## Admin User Endpoints
 
@@ -116,10 +140,11 @@ paths:
   `users.promoted_by`. `POST /api/admin/users/{id}/demote` follows these rules: the root admin can
   never be demoted, nobody can demote themselves, root can demote any other admin, and otherwise
   only the recorded promoter can (an admin with no recorded promoter counts as promoted by root).
+- Borrow counts only include real loans, not reservations.
 - `DELETE /api/admin/users/{id}` removes a user with their loans and interests. Who may delete whom
   follows the demotion rules (never root, never yourself, an admin only by root or their promoter,
-  a non-admin by any admin). It answers `409` while the user still has books on loan or unpaid
-  fines, so those must be returned, paid or forgiven first. Users the deleted admin had promoted
+  a non-admin by any admin). It answers `409` while the user still has books on loan, an active
+  reservation or unpaid fines, so those must be returned, expire, or be paid or forgiven first. Users the deleted admin had promoted
   keep their admin flag with no recorded promoter. Each row carries `deletable` for the caller.
 - `GET /api/admin/users/{id}/fines` lists the user's loans that carry a fine, and
   `POST /api/admin/users/{id}/loans/{loanId}/forgive` forgives an unpaid fine (`409` for any other
@@ -133,8 +158,9 @@ paths:
   context; `PingControllerTest` is a `@WebMvcTest` slice (it uses `@WithMockUser`, because the
   slice does not load `SecurityConfig`). `UserFlowTest` covers the whole sign-up and login flow
   through `MockMvc`, carrying the session between requests; `InterestFlowTest`, `LoanFlowTest`,
-  `BookFlowTest`, `ColumnFlowTest` and `AdminUserFlowTest` do the same for their routes, and
-  `LoanServiceTest` covers every loan status and fine rule. `AdminUserFlowTest` also checks that a
+  `BookFlowTest`, `ColumnFlowTest`, `BorrowFlowTest` and `AdminUserFlowTest` do the same for their
+  routes, and `LoanServiceTest` covers every loan status, fine rule, borrow block and reservation
+  release. `AdminUserFlowTest` also checks that a
   demoted admin's old session answers `401`, the delete rules and self-deletion.
 - Full-context tests carry `@ActiveProfiles("test")`, which loads `application-test.yml` (H2
   in-memory, PostgreSQL mode) on top of `application.yml`. Keep it a profile file rather than a

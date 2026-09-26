@@ -53,6 +53,9 @@ public class User {
     @Column(name = "users_columns", length = 100)
     private String usersColumns;
 
+    @Column(name = "borrow_columns", length = 100)
+    private String borrowColumns;
+
     @Column(name = "promoted_by")
     private Long promotedById;
 
@@ -140,6 +143,14 @@ public class User {
 
     public void setUsersColumns(String usersColumns) {
         this.usersColumns = usersColumns;
+    }
+
+    public String getBorrowColumns() {
+        return borrowColumns;
+    }
+
+    public void setBorrowColumns(String borrowColumns) {
+        this.borrowColumns = borrowColumns;
     }
 
     public Long getPromotedById() {

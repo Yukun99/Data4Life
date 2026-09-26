@@ -200,6 +200,22 @@ class BookFlowTest {
     }
 
     @Test
+    void amountBelowLoansAndReservationsIsBadRequest() throws Exception {
+        openLoan(DUNE);
+        User user = userRepository.findByEmail("admin@example.com").orElseThrow();
+        Instant now = Instant.now();
+        loanRepository.save(Loan.reserved(user, bookRepository.findById(DUNE).orElseThrow(), now,
+                now.plus(Duration.ofDays(LoanService.RESERVE_DAYS))));
+
+        send(put("/api/books/{isbn}", DUNE), body(DUNE, "Dune", fantasyId, englishId, 1))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Amount is below copies on loan"));
+        send(put("/api/books/{isbn}", DUNE), body(DUNE, "Dune", fantasyId, englishId, 2))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stock").value(0));
+    }
+
+    @Test
     void updateIsbnRepointsLoans() throws Exception {
         Loan loan = openLoan(DUNE);
 

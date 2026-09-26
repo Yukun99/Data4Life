@@ -8,7 +8,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { ada, admin } from '../../users';
 import withStore from '../../with-store';
 
-const NON_ADMIN_IDS = ['nav-home', 'nav-borrow', 'nav-return', 'nav-reserve', 'nav-profile'];
+const NON_ADMIN_IDS = ['nav-home', 'nav-borrow', 'nav-return', 'nav-profile'];
 
 const renderHeader = (user: User) =>
   render(
@@ -49,6 +49,7 @@ describe('Header', () => {
     }
     expect(screen.queryByTestId('nav-users')).not.toBeInTheDocument();
     expect(screen.queryByTestId('nav-catalogue')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nav-reserve')).not.toBeInTheDocument();
   });
 
   it('shows the admin pages to an admin', async () => {

@@ -47,8 +47,8 @@ cycles. Only `app/` exists at first; create the others when something belongs th
 
 - MUI (`@mui/material`, `@mui/icons-material`, Emotion) for components and `react-router` for
   routing. `app/routes.tsx` declares the routes. `/login` and `/create` are guest routes, and
-  `app/require-auth.tsx` sends a logged-in user from them to `/`. `/`, `/borrow`, `/return`,
-  `/reserve` and `/profile` need a login and render inside `app/layout.tsx`, which adds the header.
+  `app/require-auth.tsx` sends a logged-in user from them to `/`. `/`, `/borrow`, `/return`
+  and `/profile` need a login and render inside `app/layout.tsx`, which adds the header.
   `/users` and `/catalogue` are also wrapped in `app/require-admin.tsx`, which sends non-admins to
   `/`. Unknown paths go to `/`.
 - `/profile` has two columns that stack on narrow screens. The left holds the profile card (edit
@@ -56,12 +56,29 @@ cycles. Only `app/` exists at first; create the others when something belongs th
   `DELETE /api/auth/me` through the `deleteAccount` thunk and, on success, clears the user so the
   guard sends them to `/login`) and the interests card (genres and languages, at most 10, with a first-time dialog
   that can be skipped). The right holds the History / Payments panel with loan stats, statuses and
-  fine payments; a fine an admin forgave shows a Forgiven chip and no Pay button. The `Loan` and
+  fine payments; a fine an admin forgave shows a Forgiven chip and no Pay button. A reservation
+  shows as Reserved (with its end date) or Expired, both with the $5.00 fee that was paid. Pay and
+  Pay all ask for confirmation first. The `Loan` and
   `LoanStatus` types live in `common/types.ts` and are re-exported by the history slice. The loan
   history, its loading and error state and the `fetchHistory`,
   `payLoan` and `payAllFines` thunks live in the `history` slice (`store/history-slice.ts`);
   `pages/profile/hooks/use-history.ts` only dispatches them. The profile card and interests keep
   their form state in page-local hooks under `pages/profile/hooks/`.
+- `/borrow` lists the books for any logged-in user, built on the data table framework. Each row
+  offers Borrow and Reserve (a reservation costs $5.00 and holds a copy for 7 days). A book the user
+  has on loan shows a Borrowed chip and no buttons; a reserved book shows a Reserved chip and a
+  Borrow button that turns the reservation into a loan. The buttons are disabled, with a tooltip,
+  when the book is out of stock or when the backend sends a block reason (unpaid fines, an overdue
+  book, or 8 books held), which also shows as a banner above the table. The Borrow button on a
+  reserved row follows the response's `convertBlock` instead, so the 8 book cap does not disable
+  it. The `borrow` slice
+  (`store/borrow-slice.ts`) holds the list, its query values, the block reason, the column widths
+  (saved at `/api/borrow/columns`) and the thunks for every `/api/borrow` call.
+  `pages/borrow/hooks/use-borrow-action.ts` drives the confirm dialog and reloads the list after a
+  change.
+- `common/components/confirm-dialog.tsx` is the shared confirm dialog (title, body, confirm label,
+  error and loading state). It is used for borrowing and reserving, paying fines on the profile page
+  and forgiving a fine on the users page. Older dialogs keep their own components.
 - `/catalogue` is the admin book table, built on the data table framework described below. The
   list, the page, size, sort and filter values and the filter options live in the `catalogue` slice
   (`store/catalogue-slice.ts`), which also holds the thunks for every `/api/books` call. The add,
@@ -72,7 +89,7 @@ cycles. Only `app/` exists at first; create the others when something belongs th
   name and email, admin flag, join date, total and current borrows and total and current fines.
   Row actions promote a user, demote an admin, delete a user (each enabled only when the backend's
   `demotable` or `deletable` flag says the current admin may) and open a fines dialog where unpaid
-  fines can be forgiven one loan at a time. Promote, demote and delete share one confirm dialog
+  fines can be forgiven one loan at a time, after a confirm step. Promote, demote and delete share one confirm dialog
   (`action-dialog.tsx`, driven by `use-user-action.ts`). The `users` slice (`store/users-slice.ts`) holds the list, its query values, the
   column widths (saved at `/api/admin/users/columns`), the open user's fines and the thunks for
   every `/api/admin/users` call. The action and fines dialogs keep their local state in hooks under
@@ -113,6 +130,7 @@ sends the page, size, sort and filter values.
   per field) complete a page. `buildQuery` (`build-query.ts`) writes the list query string in a
   fixed order (`page`, `size`, `sort`, `dir`, then set filters in the given key order) so specs can
   stub exact URLs.
+- Three pages use it: `/catalogue`, `/users` and `/borrow`.
 - To add a table page: define its column keys, default widths, sort keys and filter keys in a slice
   with the same reducers as the catalogue or users slice, write the column specs in a page
   component, and pass the slice values and actions to these components.

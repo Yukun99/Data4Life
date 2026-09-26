@@ -29,10 +29,10 @@ public class Loan {
     @JoinColumn(name = "book_isbn", nullable = false)
     private Book book;
 
-    @Column(name = "borrowed_at", nullable = false)
+    @Column(name = "borrowed_at")
     private Instant borrowedAt;
 
-    @Column(name = "due_at", nullable = false)
+    @Column(name = "due_at")
     private Instant dueAt;
 
     @Column(name = "returned_at")
@@ -44,6 +44,15 @@ public class Loan {
     @Column(name = "fine_forgiven_at")
     private Instant fineForgivenAt;
 
+    @Column(name = "reserved_at")
+    private Instant reservedAt;
+
+    @Column(name = "reserved_until")
+    private Instant reservedUntil;
+
+    @Column(name = "released_at")
+    private Instant releasedAt;
+
     protected Loan() {
     }
 
@@ -52,6 +61,13 @@ public class Loan {
         this.book = book;
         this.borrowedAt = borrowedAt;
         this.dueAt = dueAt;
+    }
+
+    public static Loan reserved(User user, Book book, Instant reservedAt, Instant reservedUntil) {
+        Loan loan = new Loan(user, book, null, null);
+        loan.reservedAt = reservedAt;
+        loan.reservedUntil = reservedUntil;
+        return loan;
     }
 
     public Long getId() {
@@ -70,8 +86,16 @@ public class Loan {
         return borrowedAt;
     }
 
+    public void setBorrowedAt(Instant borrowedAt) {
+        this.borrowedAt = borrowedAt;
+    }
+
     public Instant getDueAt() {
         return dueAt;
+    }
+
+    public void setDueAt(Instant dueAt) {
+        this.dueAt = dueAt;
     }
 
     public Instant getReturnedAt() {
@@ -96,5 +120,25 @@ public class Loan {
 
     public void setFineForgivenAt(Instant fineForgivenAt) {
         this.fineForgivenAt = fineForgivenAt;
+    }
+
+    public Instant getReservedAt() {
+        return reservedAt;
+    }
+
+    public Instant getReservedUntil() {
+        return reservedUntil;
+    }
+
+    public void setReservedUntil(Instant reservedUntil) {
+        this.reservedUntil = reservedUntil;
+    }
+
+    public Instant getReleasedAt() {
+        return releasedAt;
+    }
+
+    public void setReleasedAt(Instant releasedAt) {
+        this.releasedAt = releasedAt;
     }
 }

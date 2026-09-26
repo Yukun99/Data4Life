@@ -62,10 +62,13 @@ const loan = (id: number, overrides: Partial<Loan>): Loan => ({
   genre: 'Fantasy',
   borrowedAt: '2026-01-01T00:00:00Z',
   dueAt: '2026-01-15T00:00:00Z',
+  reservedAt: null,
+  reservedUntil: null,
   returnedAt: '2026-01-21T00:00:00Z',
   status: 'UNPAID',
   overdueDays: 6,
   fine: 6,
+  fee: 0,
   ...overrides,
 });
 
@@ -217,7 +220,18 @@ describe('UsersPage', () => {
     expect(screen.queryByTestId('fines-forgive-5')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByTestId('fines-forgive-4'));
+    expect(screen.getByTestId('forgive-dialog')).toHaveTextContent('Forgive $6.00 fine for Book 4?');
+    expect(screen.getByTestId('forgive-dialog')).toHaveTextContent(
+      'Ada will no longer owe this fine.',
+    );
+    await userEvent.click(screen.getByTestId('forgive-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('forgive-dialog')).not.toBeInTheDocument());
+    expect(fetchMock).not.toHaveBeenCalledWith(`${BASE}/1/loans/4/forgive`, expect.anything());
 
+    await userEvent.click(screen.getByTestId('fines-forgive-4'));
+    await userEvent.click(screen.getByTestId('forgive-confirm'));
+
+    await waitFor(() => expect(screen.queryByTestId('forgive-dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByTestId('fines-status-4')).toHaveTextContent('Forgiven'));
     expect(screen.queryByTestId('fines-forgive-4')).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(

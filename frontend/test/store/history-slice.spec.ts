@@ -10,10 +10,13 @@ const loan = {
   genre: 'Fantasy',
   borrowedAt: '2026-01-01T00:00:00Z',
   dueAt: '2026-01-15T00:00:00Z',
+  reservedAt: null,
+  reservedUntil: null,
   returnedAt: '2026-01-21T00:00:00Z',
   status: 'UNPAID' as const,
   overdueDays: 6,
   fine: 6,
+  fee: 0,
 };
 
 const history: History = {

@@ -16,7 +16,7 @@ import Typography from '@mui/material/Typography';
 type LoanRowProps = {
   loan: Loan;
   paying: boolean;
-  onPay: (id: number) => void;
+  onPay: (loan: Loan) => void;
 };
 
 const dueText = (dueAt: string) => {
@@ -24,10 +24,10 @@ const dueText = (dueAt: string) => {
   return left > 0 ? `Due in ${formatDays(left)}` : 'Due today';
 };
 
-const detail = ({ status, dueAt, overdueDays, fine }: Loan) => {
+const detail = ({ status, dueAt, reservedUntil, overdueDays, fine, fee }: Loan) => {
   switch (status) {
     case 'BORROWED':
-      return dueText(dueAt);
+      return dueAt ? dueText(dueAt) : '';
     case 'OVERDUE':
       return `${formatDays(overdueDays)} overdue · ${formatMoney(fine)} so far`;
     case 'UNPAID':
@@ -36,6 +36,10 @@ const detail = ({ status, dueAt, overdueDays, fine }: Loan) => {
       return `${formatMoney(fine)} paid`;
     case 'FORGIVEN':
       return `${formatDays(overdueDays)} late · ${formatMoney(fine)} forgiven`;
+    case 'RESERVED':
+      return `Reserved until ${formatDate(reservedUntil ?? '')} · ${formatMoney(fee)} fee paid`;
+    case 'EXPIRED':
+      return `Reservation expired · ${formatMoney(fee)} fee paid`;
     case 'RETURNED':
       return '';
   }
@@ -53,7 +57,11 @@ const LoanRow = ({ loan, paying, onPay }: LoanRowProps) => (
           {loan.title}
         </Typography>
         <Typography variant="body2">{loan.author}</Typography>
-        <Typography variant="caption">Borrowed {formatDate(loan.borrowedAt)}</Typography>
+        <Typography variant="caption">
+          {loan.borrowedAt
+            ? `Borrowed ${formatDate(loan.borrowedAt)}`
+            : `Reserved ${formatDate(loan.reservedAt ?? '')}`}
+        </Typography>
       </Stack>
       <Stack
         direction="row"
@@ -73,7 +81,7 @@ const LoanRow = ({ loan, paying, onPay }: LoanRowProps) => (
             size="small"
             variant="contained"
             loading={paying}
-            onClick={() => onPay(loan.id)}
+            onClick={() => onPay(loan)}
             data-testid={`loan-pay-${loan.id}`}
           >
             Pay

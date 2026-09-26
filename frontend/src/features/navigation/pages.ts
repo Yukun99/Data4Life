@@ -1,6 +1,5 @@
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
-import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import HomeIcon from '@mui/icons-material/Home';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
@@ -19,7 +18,6 @@ export const PAGES: Page[] = [
   { path: '/', label: 'Home', icon: HomeIcon, testId: 'nav-home' },
   { path: '/borrow', label: 'Borrow', icon: MenuBookIcon, testId: 'nav-borrow' },
   { path: '/return', label: 'Return', icon: AssignmentReturnIcon, testId: 'nav-return' },
-  { path: '/reserve', label: 'Reserve', icon: EventAvailableIcon, testId: 'nav-reserve' },
   { path: '/profile', label: 'Profile', icon: AccountCircleIcon, testId: 'nav-profile' },
   { path: '/users', label: 'Users', icon: PeopleIcon, testId: 'nav-users', admin: true },
   {
