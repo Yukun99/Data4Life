@@ -2,11 +2,14 @@ package com.yukunxu.data4life.config;
 
 import com.yukunxu.data4life.user.EmailTakenException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -18,6 +21,17 @@ public class ApiExceptionHandler {
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .findFirst()
                 .orElse("Invalid request"));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse unreadable() {
+        return new ErrorResponse("Invalid request");
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> statusException(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode()).body(new ErrorResponse(ex.getReason()));
     }
 
     @ExceptionHandler(EmailTakenException.class)

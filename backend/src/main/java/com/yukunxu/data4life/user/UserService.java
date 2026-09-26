@@ -41,6 +41,14 @@ public class UserService implements UserDetailsService {
     }
 
     @Transactional
+    public User updateProfile(String email, String name, Avatar avatar) {
+        User user = getByEmail(email);
+        user.setName(name.trim());
+        user.setAvatar(avatar);
+        return repository.save(user);
+    }
+
+    @Transactional
     public void promoteAdmin() {
         if (adminEmail.isEmpty()) {
             return;

@@ -64,7 +64,7 @@ The app has three pages: `/create` (sign up), `/login` and `/profile`. Assumptio
 - Creating an account logs the new user in straight away.
 - Logins use a server-side session cookie, not tokens. The site is same-origin, so there is no CORS
   and CSRF protection is off for the JSON API.
-- There are no roles, password resets or profile edits yet.
+- There are no password resets yet. Users can change their name and pick a profile icon.
 - The colour scheme follows the system's light or dark mode.
 
 | Method | Path               | Body                        | Result                                  |
@@ -74,7 +74,18 @@ The app has three pages: `/create` (sign up), `/login` and `/profile`. Assumptio
 | POST   | `/api/auth/logout` |                             | `204`                                   |
 | GET    | `/api/auth/me`     |                             | `200` user, or `401` when logged out    |
 
-A user is returned as `{ id, name, email, createdAt }`; errors as `{ message }`.
+A user is returned as `{ id, name, email, createdAt, admin, avatar }`; errors as `{ message }`.
+
+## Assumptions
+
+- A loan lasts 14 days from the day the book is borrowed.
+- A book returned late is fined $1.00 for every started day past the due date.
+- Fines can only be paid after the book is returned. A book still out shows its fine so far, which
+  becomes payable on return.
+- "Total Overdue Fines" and "Pay all" cover only returned books with unpaid fines.
+- A user can pick at most 10 interests in total across genres and languages.
+- For the demo, every user without loans gets five sample loans at startup, one for each status.
+  This seeder is marked for removal once borrowing and returning exist.
 
 ## Deploy
 

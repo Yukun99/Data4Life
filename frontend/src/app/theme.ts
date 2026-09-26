@@ -1,6 +1,6 @@
 import { createTheme } from '@mui/material/styles';
 
-const navy = '#000076';
+const navy = '#000040';
 const peach = '#FFDACF';
 
 const theme = createTheme({

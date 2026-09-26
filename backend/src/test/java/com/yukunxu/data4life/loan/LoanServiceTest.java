@@ -1,0 +1,234 @@
+package com.yukunxu.data4life.loan;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.yukunxu.data4life.catalogue.BookRepository;
+import com.yukunxu.data4life.user.User;
+import com.yukunxu.data4life.user.UserRepository;
+import java.time.Duration;
+import java.time.Instant;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+@SpringBootTest
+@ActiveProfiles("test")
+@Transactional
+class LoanServiceTest {
+
+    private static final String SAPIENS = "9780062316097";
+    private static final String CHRISTIE = "9780062693662";
+    private static final String KOKORO = "9784101010137";
+    private static final String RED_CHAMBER = "9787020002207";
+
+    @Autowired
+    private LoanService loanService;
+
+    @Autowired
+    private LoanRepository loanRepository;
+
+    @Autowired
+    private BookRepository bookRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    private User user;
+    private Instant now;
+
+    @BeforeEach
+    void setUp() {
+        user = userRepository.save(new User("ada@example.com", "Ada", "hash"));
+        now = Instant.now();
+    }
+
+    @Test
+    void borrowedWithinLoanPeriod() {
+        Loan loan = loan(SAPIENS, now.minus(days(3)), null, null);
+
+        LoanResponse row = onlyRow();
+        assertThat(row.id()).isEqualTo(loan.getId());
+        assertThat(row.status()).isEqualTo(LoanStatus.BORROWED);
+        assertThat(row.overdueDays()).isZero();
+        assertThat(row.fine()).isEqualByComparingTo("0.00");
+        assertThat(row.dueAt()).isEqualTo(loan.getDueAt());
+    }
+
+    @Test
+    void overdueCountsDaysSoFar() {
+        loan(SAPIENS, now.minus(days(20)).plus(Duration.ofHours(1)), null, null);
+
+        LoanResponse row = onlyRow();
+        assertThat(row.status()).isEqualTo(LoanStatus.OVERDUE);
+        assertThat(row.overdueDays()).isEqualTo(6);
+        assertThat(row.fine()).isEqualByComparingTo("6.00");
+    }
+
+    @Test
+    void returnedOnTimeHasNoFine() {
+        loan(SAPIENS, now.minus(days(30)), now.minus(days(25)), null);
+
+        LoanResponse row = onlyRow();
+        assertThat(row.status()).isEqualTo(LoanStatus.RETURNED);
+        assertThat(row.overdueDays()).isZero();
+        assertThat(row.fine()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void returnedExactlyOnDueDateIsReturned() {
+        Instant borrowedAt = now.minus(days(30));
+        loan(SAPIENS, borrowedAt, borrowedAt.plus(days(LoanService.LOAN_DAYS)), null);
+
+        assertThat(onlyRow().status()).isEqualTo(LoanStatus.RETURNED);
+    }
+
+    @Test
+    void returnedLateIsUnpaid() {
+        loan(SAPIENS, now.minus(days(40)), now.minus(days(20)), null);
+
+        LoanResponse row = onlyRow();
+        assertThat(row.status()).isEqualTo(LoanStatus.UNPAID);
+        assertThat(row.overdueDays()).isEqualTo(6);
+        assertThat(row.fine()).isEqualByComparingTo("6.00");
+        assertThat(row.fine().scale()).isEqualTo(2);
+    }
+
+    @Test
+    void partialDayLateCountsAsOneDay() {
+        Instant borrowedAt = now.minus(days(30));
+        loan(SAPIENS, borrowedAt, borrowedAt.plus(days(LoanService.LOAN_DAYS)).plus(Duration.ofHours(1)), null);
+
+        LoanResponse row = onlyRow();
+        assertThat(row.status()).isEqualTo(LoanStatus.UNPAID);
+        assertThat(row.overdueDays()).isEqualTo(1);
+        assertThat(row.fine()).isEqualByComparingTo("1.00");
+    }
+
+    @Test
+    void paidKeepsFine() {
+        loan(SAPIENS, now.minus(days(60)), now.minus(days(40)), now.minus(days(39)));
+
+        LoanResponse row = onlyRow();
+        assertThat(row.status()).isEqualTo(LoanStatus.PAID);
+        assertThat(row.overdueDays()).isEqualTo(6);
+        assertThat(row.fine()).isEqualByComparingTo("6.00");
+    }
+
+    @Test
+    void statsWithoutLoans() {
+        HistoryResponse history = loanService.history(user);
+
+        assertThat(history.loans()).isEmpty();
+        assertThat(history.stats().booksBorrowed()).isZero();
+        assertThat(history.stats().favouriteGenre()).isNull();
+        assertThat(history.stats().favouriteAuthor()).isNull();
+        assertThat(history.stats().totalOverdueFines()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void statsCountFavouritesAndUnpaidFines() {
+        loan(KOKORO, now.minus(days(40)), now.minus(days(20)), null);
+        loan(KOKORO, now.minus(days(30)), now.minus(days(25)), null);
+        loan(RED_CHAMBER, now.minus(days(30)).plus(Duration.ofHours(1)), now.minus(days(15)), null);
+        loan(SAPIENS, now.minus(days(20)).plus(Duration.ofHours(1)), null, null);
+        loan(CHRISTIE, now.minus(days(60)), now.minus(days(40)), now.minus(days(39)));
+
+        HistoryResponse history = loanService.history(user);
+
+        assertThat(history.stats().booksBorrowed()).isEqualTo(5);
+        assertThat(history.stats().favouriteGenre()).isEqualTo("Literary Fiction");
+        assertThat(history.stats().favouriteAuthor()).isEqualTo("Natsume Soseki");
+        assertThat(history.stats().totalOverdueFines()).isEqualByComparingTo("7.00");
+        assertThat(history.loans()).extracting(LoanResponse::borrowedAt).isSortedAccordingTo((a, b) -> b.compareTo(a));
+    }
+
+    @Test
+    void favouritesTieGoesToAlphabeticalFirst() {
+        loan(SAPIENS, now.minus(days(3)), null, null);
+        loan(CHRISTIE, now.minus(days(2)), null, null);
+
+        HistoryStats stats = loanService.history(user).stats();
+
+        assertThat(stats.favouriteGenre()).isEqualTo("History");
+        assertThat(stats.favouriteAuthor()).isEqualTo("Agatha Christie");
+    }
+
+    @Test
+    void payMarksUnpaidLoanPaid() {
+        Loan loan = loan(SAPIENS, now.minus(days(40)), now.minus(days(20)), null);
+
+        loanService.pay(user, loan.getId());
+
+        assertThat(loan.getFinePaidAt()).isNotNull();
+        assertThat(onlyRow().status()).isEqualTo(LoanStatus.PAID);
+        assertThat(loanService.history(user).stats().totalOverdueFines()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void payWithoutUnpaidFineIsConflict() {
+        Loan borrowed = loan(SAPIENS, now.minus(days(3)), null, null);
+        Loan overdue = loan(SAPIENS, now.minus(days(20)), null, null);
+        Loan returned = loan(SAPIENS, now.minus(days(30)), now.minus(days(25)), null);
+        Loan paid = loan(SAPIENS, now.minus(days(60)), now.minus(days(40)), now.minus(days(39)));
+
+        for (Loan loan : new Loan[] {borrowed, overdue, returned, paid}) {
+            assertStatus(() -> loanService.pay(user, loan.getId()), HttpStatus.CONFLICT);
+        }
+    }
+
+    @Test
+    void payOtherUsersLoanIsNotFound() {
+        User other = userRepository.save(new User("bob@example.com", "Bob", "hash"));
+        Loan loan = loan(SAPIENS, now.minus(days(40)), now.minus(days(20)), null);
+
+        assertStatus(() -> loanService.pay(other, loan.getId()), HttpStatus.NOT_FOUND);
+        assertStatus(() -> loanService.pay(user, -1L), HttpStatus.NOT_FOUND);
+        assertThat(loan.getFinePaidAt()).isNull();
+    }
+
+    @Test
+    void payAllPaysOnlyUnpaidLoans() {
+        Loan unpaid = loan(SAPIENS, now.minus(days(40)), now.minus(days(20)), null);
+        Loan secondUnpaid = loan(CHRISTIE, now.minus(days(35)), now.minus(days(20)), null);
+        Loan overdue = loan(KOKORO, now.minus(days(20)), null, null);
+        Loan returned = loan(RED_CHAMBER, now.minus(days(30)), now.minus(days(25)), null);
+
+        loanService.payAll(user);
+
+        assertThat(unpaid.getFinePaidAt()).isNotNull();
+        assertThat(secondUnpaid.getFinePaidAt()).isNotNull();
+        assertThat(overdue.getFinePaidAt()).isNull();
+        assertThat(returned.getFinePaidAt()).isNull();
+        assertThat(loanService.history(user).stats().totalOverdueFines()).isEqualByComparingTo("0.00");
+    }
+
+    private Loan loan(String isbn, Instant borrowedAt, Instant returnedAt, Instant finePaidAt) {
+        Loan loan = new Loan(user, bookRepository.findById(isbn).orElseThrow(), borrowedAt,
+                borrowedAt.plus(days(LoanService.LOAN_DAYS)));
+        loan.setReturnedAt(returnedAt);
+        loan.setFinePaidAt(finePaidAt);
+        return loanRepository.save(loan);
+    }
+
+    private LoanResponse onlyRow() {
+        HistoryResponse history = loanService.history(user);
+        assertThat(history.loans()).hasSize(1);
+        return history.loans().getFirst();
+    }
+
+    private static Duration days(long days) {
+        return Duration.ofDays(days);
+    }
+
+    private static void assertStatus(Runnable call, HttpStatus status) {
+        assertThatThrownBy(call::run)
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(status));
+    }
+}

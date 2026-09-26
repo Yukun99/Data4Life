@@ -49,17 +49,21 @@ cycles. Only `app/` exists at first; create the others when something belongs th
   `/reserve` and `/profile` need a login and render inside `app/layout.tsx`, which adds the header.
   `/users` and `/catalogue` are also wrapped in `app/require-admin.tsx`, which sends non-admins to
   `/`. Unknown paths go to `/`.
+- `/profile` has two columns that stack on narrow screens. The left holds the profile card (edit
+  name and icon) and the interests card (genres and languages, at most 10, with a first-time dialog
+  that can be skipped). The right holds the History / Payments panel with loan stats, statuses and
+  fine payments. Its data loading lives in page-local hooks under `pages/profile/hooks/`.
 - `features/navigation/` holds the header (menu button, `Library` title, theme toggle), the nav
   drawer and `pages.ts`, the list of pages with their labels, icons and admin flag.
   `app/document-title.tsx` sets the tab title to `Library - <Page>` from that list.
-- The theme lives in `app/theme.ts`. Light mode is `#000076` on `#FFDACF`, dark mode is the inverse.
+- The theme lives in `app/theme.ts`. Light mode is `#000040` on `#FFDACF`, dark mode is the inverse.
   The header toggle switches modes through MUI's `useColorScheme`, which stores the choice as
   `mui-mode` in localStorage and sets `data-mui-color-scheme` on `<html>`; until the user picks one
   the mode follows the system. An inline script in `index.html` applies the stored mode before the
   app loads, so a reload does not flash. Take colours from the theme palette rather than hard-coding
   them. The favicon is `public/favicon.svg`.
 - The `user` slice in `store/user-slice.ts` holds the current user (`fetchMe` loads it from
-  `GET /api/auth/me` on start) and offers the `login` and `logout` thunks and the `selectUser`,
+  `GET /api/auth/me` on start) and offers the `login`, `updateProfile` and `logout` thunks and the `selectUser`,
   `selectUserLoading` and `selectIsAdmin` selectors. Call the backend through `apiFetch` in
   `common/utils/api.ts`, which throws an `ApiError` carrying the backend's message.
 

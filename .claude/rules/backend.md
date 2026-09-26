@@ -16,9 +16,12 @@ paths:
 ## Layout
 
 - Package by feature under `com.yukunxu.data4life`: `ping/` holds `PingController`
-  (`GET /api/ping`), `user/` holds the `users` table, sign-up (`POST /api/users`) and the
-  `UserDetailsService`, `auth/` holds login, logout and the current user (`/api/auth/*`), and
-  `config/` holds the security setup and the JSON error handler. A new feature gets its own package with its controller, service, repository
+  (`GET /api/ping`), `user/` holds the `users` table, sign-up (`POST /api/users`), profile edits
+  (`PUT /api/users/me`) and the `UserDetailsService`, `auth/` holds login, logout and the current
+  user (`/api/auth/*`), `catalogue/` holds the books, genres and languages tables (no endpoints yet),
+  `interest/` holds a user's genre and language interests (`/api/interests`), `loan/` holds loans,
+  fines and payments (`/api/loans`), and `config/` holds the security setup and the JSON error
+  handler. A new feature gets its own package with its controller, service, repository
   and entities together; cross-cutting configuration goes in a `config/` package when needed.
 - Every HTTP route sits under `/api/`; that prefix is what the Vite dev proxy and the Nginx
   container route to the backend. The backend is never exposed directly, so there is no CORS setup.
@@ -34,15 +37,17 @@ paths:
   password hash and stores the login in the HTTP session, so the browser only carries the session
   cookie. `POST /api/auth/logout` invalidates it and `GET /api/auth/me` returns the current user.
 - Public routes: `POST /api/users`, `POST /api/auth/login`, `GET /api/ping` and
-  `/actuator/health`. Everything else needs a session and answers `401` without one; there are no
-  login redirects or forms.
+  `/actuator/health`. Everything else needs a session and answers `401` without one, including
+  `PUT /api/users/me`, `/api/interests/**` and `/api/loans/**`; there are no login redirects or
+  forms.
 - Users have an `is_admin` flag. The account whose email matches `ADMIN_EMAIL` becomes admin on
   sign-up, and `AdminPromoter` promotes it at startup if it already exists. Admins get `ROLE_ADMIN`
   on top of `ROLE_USER`, and `@EnableMethodSecurity` is on, so admin-only endpoints can use
   `@PreAuthorize("hasRole('ADMIN')")`.
 - CSRF protection is off because the site is same-origin and the API only accepts JSON.
 - Errors come back as `{ "message": "..." }` from `ApiExceptionHandler`: `400` for validation, `401`
-  for bad credentials and `409` for an email that is already taken.
+  for bad credentials and `409` for an email that is already taken. Services throw
+  `ResponseStatusException` for other business errors, which the handler also turns into `{ "message" }`.
 
 ## Database
 
@@ -54,13 +59,19 @@ paths:
   password `data4life` (the defaults in `application.yml`), or `DB_*` variables pointing elsewhere.
   Install PostgreSQL 17 and create the role and database once, as shown in the README. Flyway creates
   the tables on the first `./mvnw spring-boot:run`.
+- Genres, languages and ten sample books are seeded by migrations. Loans last 14 days and overdue
+  fines are $1.00 per started day (`LoanService`). A loan's status (borrowed, overdue, returned,
+  unpaid, paid) and fine are derived from its dates, never stored.
+- `LoanSeeder` gives every user without loans five sample loans at startup, one per status. It
+  carries a `TODO` to remove it once the borrow and return flow creates real loans.
 
 ## Tests
 
 - Tests mirror the main package under `src/test/java`. `Data4LifeApplicationTests` boots the full
   context; `PingControllerTest` is a `@WebMvcTest` slice (it uses `@WithMockUser`, because the
   slice does not load `SecurityConfig`). `UserFlowTest` covers the whole sign-up and login flow
-  through `MockMvc`, carrying the session between requests.
+  through `MockMvc`, carrying the session between requests; `InterestFlowTest` and `LoanFlowTest`
+  do the same for their routes, and `LoanServiceTest` covers every loan status and fine rule.
 - Full-context tests carry `@ActiveProfiles("test")`, which loads `application-test.yml` (H2
   in-memory, PostgreSQL mode) on top of `application.yml`. Keep it a profile file rather than a
   second `application.yml`, because a test `application.yml` would shadow the main one entirely.

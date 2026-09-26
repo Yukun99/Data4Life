@@ -1,5 +1,5 @@
 import { createStore } from '@/store/store';
-import { fetchMe, login, logout } from '@/store/user-slice';
+import { fetchMe, login, logout, updateProfile } from '@/store/user-slice';
 import mockFetch from '../mock-fetch';
 import { ada } from '../users';
 
@@ -54,5 +54,25 @@ describe('user slice', () => {
     await store.dispatch(logout());
 
     expect(store.getState().user.user).toBeNull();
+  });
+
+  it('updateProfile replaces the user', async () => {
+    const updated = { ...ada, name: 'Ada L', avatar: 'ROCKET' as const };
+    mockFetch({ 'PUT /api/users/me': { status: 200, body: updated } });
+    const store = createStore({ user: { user: ada, loading: false } });
+
+    await store.dispatch(updateProfile({ name: 'Ada L', avatar: 'ROCKET' })).unwrap();
+
+    expect(store.getState().user.user).toEqual(updated);
+  });
+
+  it('updateProfile rejects with the backend message and keeps the user', async () => {
+    mockFetch({ 'PUT /api/users/me': { status: 400, body: { message: 'Invalid request' } } });
+    const store = createStore({ user: { user: ada, loading: false } });
+
+    const result = await store.dispatch(updateProfile({ name: 'Ada', avatar: 'STAR' }));
+
+    expect(result.payload).toBe('Invalid request');
+    expect(store.getState().user.user).toEqual(ada);
   });
 });

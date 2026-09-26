@@ -2,6 +2,7 @@ package com.yukunxu.data4life.user;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,6 +35,7 @@ class UserFlowTest {
                 .andExpect(jsonPath("$.email").value("ada@example.com"))
                 .andExpect(jsonPath("$.createdAt").isString())
                 .andExpect(jsonPath("$.admin").value(false))
+                .andExpect(jsonPath("$.avatar").value("ACCOUNT"))
                 .andExpect(jsonPath("$.password").doesNotExist());
 
         MockHttpSession session = (MockHttpSession) login("ADA@example.com", "secret123")
@@ -98,6 +100,59 @@ class UserFlowTest {
                 .andExpect(status().isBadRequest());
         createUser("Ada", "ada@example.com", "has spaces 123")
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateProfileChangesNameAndAvatar() throws Exception {
+        MockHttpSession session = signUpAndLogin();
+
+        updateProfile(session, "  Ada Lovelace ", "ROCKET")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Ada Lovelace"))
+                .andExpect(jsonPath("$.avatar").value("ROCKET"));
+
+        mockMvc.perform(get("/api/auth/me").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Ada Lovelace"))
+                .andExpect(jsonPath("$.avatar").value("ROCKET"));
+    }
+
+    @Test
+    void updateProfileRejectsBlankNameAndUnknownAvatar() throws Exception {
+        MockHttpSession session = signUpAndLogin();
+
+        updateProfile(session, " ", "ROCKET")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isString());
+        updateProfile(session, "Ada", "DRAGON")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid request"));
+    }
+
+    @Test
+    void updateProfileWithoutSessionIsUnauthorized() throws Exception {
+        mockMvc.perform(put("/api/users/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Ada", "avatar": "ROCKET"}
+                                """))
+                .andExpect(status().isUnauthorized());
+    }
+
+    private MockHttpSession signUpAndLogin() throws Exception {
+        createUser("Ada", "ada@example.com", "secret123").andExpect(status().isCreated());
+        return (MockHttpSession) login("ada@example.com", "secret123")
+                .andExpect(status().isOk())
+                .andReturn().getRequest().getSession();
+    }
+
+    private ResultActions updateProfile(MockHttpSession session, String name, String avatar) throws Exception {
+        return mockMvc.perform(put("/api/users/me")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"name": "%s", "avatar": "%s"}
+                        """.formatted(name, avatar)));
     }
 
     private ResultActions createUser(String name, String email, String password) throws Exception {

@@ -70,6 +70,17 @@ class UserServiceTest {
         assertThat(repository.findByEmail(other.getEmail()).orElseThrow().isAdmin()).isFalse();
     }
 
+    @Test
+    void updateProfileTrimsNameAndSetsAvatar() {
+        User created = userService.create("Ada", "ada@example.com", "secret123");
+        assertThat(created.getAvatar()).isEqualTo(Avatar.ACCOUNT);
+
+        User updated = userService.updateProfile("ADA@example.com", "  Ada L ", Avatar.STAR);
+
+        assertThat(updated.getName()).isEqualTo("Ada L");
+        assertThat(updated.getAvatar()).isEqualTo(Avatar.STAR);
+    }
+
     private static List<String> authorities(UserDetails details) {
         return details.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
     }

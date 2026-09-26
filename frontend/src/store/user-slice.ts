@@ -1,12 +1,15 @@
 import { apiFetch, errorMessage } from '@/common/utils/api';
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 
+export type Avatar = 'ACCOUNT' | 'FACE' | 'PETS' | 'ROCKET' | 'BOOK' | 'STAR' | 'BOLT' | 'SPA';
+
 export type User = {
   id: number;
   name: string;
   email: string;
   createdAt: string;
   admin: boolean;
+  avatar: Avatar;
 };
 
 export type UserState = {
@@ -19,6 +22,11 @@ type LoginParams = {
   password: string;
 };
 
+type UpdateProfileParams = {
+  name: string;
+  avatar: Avatar;
+};
+
 const initialState: UserState = { user: null, loading: true };
 
 export const fetchMe = createAsyncThunk('user/fetchMe', () => apiFetch<User>('/api/auth/me'));
@@ -29,6 +37,18 @@ export const login = createAsyncThunk<User, LoginParams, { rejectValue: string }
     try {
       const body = JSON.stringify(credentials);
       return await apiFetch<User>('/api/auth/login', { method: 'POST', body });
+    } catch (err) {
+      return rejectWithValue(errorMessage(err));
+    }
+  },
+);
+
+export const updateProfile = createAsyncThunk<User, UpdateProfileParams, { rejectValue: string }>(
+  'user/updateProfile',
+  async (profile, { rejectWithValue }) => {
+    try {
+      const body = JSON.stringify(profile);
+      return await apiFetch<User>('/api/users/me', { method: 'PUT', body });
     } catch (err) {
       return rejectWithValue(errorMessage(err));
     }
@@ -54,6 +74,9 @@ const userSlice = createSlice({
         state.loading = false;
       })
       .addCase(login.fulfilled, (state, action) => {
+        state.user = action.payload;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
         state.user = action.payload;
       })
       .addCase(logout.fulfilled, (state) => {

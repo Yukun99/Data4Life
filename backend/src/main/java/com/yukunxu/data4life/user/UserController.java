@@ -1,8 +1,10 @@
 package com.yukunxu.data4life.user;
 
 import jakarta.validation.Valid;
+import java.security.Principal;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -22,5 +24,10 @@ public class UserController {
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse create(@Valid @RequestBody CreateUserRequest request) {
         return UserResponse.from(userService.create(request.name(), request.email(), request.password()));
+    }
+
+    @PutMapping("/me")
+    public UserResponse updateMe(@Valid @RequestBody UpdateProfileRequest request, Principal principal) {
+        return UserResponse.from(userService.updateProfile(principal.getName(), request.name(), request.avatar()));
     }
 }
