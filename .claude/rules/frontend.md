@@ -53,6 +53,17 @@ cycles. Only `app/` exists at first; create the others when something belongs th
   name and icon) and the interests card (genres and languages, at most 10, with a first-time dialog
   that can be skipped). The right holds the History / Payments panel with loan stats, statuses and
   fine payments. Its data loading lives in page-local hooks under `pages/profile/hooks/`.
+- `/catalogue` is the admin book table. Paging, sorting and filtering all happen on the backend;
+  the page only sends the page, size, sort and filter values. The list, those values and the
+  filter options live in the `catalogue` slice (`store/catalogue-slice.ts`), which also holds the
+  thunks for every `/api/books` call. `buildQuery` writes the query string in a fixed order
+  (`page`, `size`, `sort`, `dir`, then set filters in column order), so specs can stub exact URLs.
+  The add, edit, merge and delete dialogs keep their form state in hooks under
+  `pages/catalogue/hooks/` and reload the list after a change. The table uses a fixed layout and
+  is always full width: column widths live in the slice (`columnWidths`, percentages summing to
+  100). Dragging a divider in the header row (`use-column-resize.ts`) moves width between the two
+  neighbouring columns, and overflowing cell text is cut with an ellipsis. The widths are loaded
+  from and saved to `/api/catalogue/columns` (per admin user) so they survive reloads.
 - `features/navigation/` holds the header (menu button, `Library` title, theme toggle), the nav
   drawer and `pages.ts`, the list of pages with their labels, icons and admin flag.
   `app/document-title.tsx` sets the tab title to `Library - <Page>` from that list.

@@ -1,7 +1,8 @@
+import { catalogueReducer } from '@/store/catalogue-slice';
 import { userReducer } from '@/store/user-slice';
 import { combineReducers, configureStore } from '@reduxjs/toolkit';
 
-const rootReducer = combineReducers({ user: userReducer });
+const rootReducer = combineReducers({ user: userReducer, catalogue: catalogueReducer });
 
 export type RootState = ReturnType<typeof rootReducer>;
 

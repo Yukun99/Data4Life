@@ -39,6 +39,16 @@ public class Book {
     protected Book() {
     }
 
+    public Book(String isbn, String title, String author, Genre genre, Language language, int amount, int stock) {
+        this.isbn = isbn;
+        this.title = title;
+        this.author = author;
+        this.genre = genre;
+        this.language = language;
+        this.amount = amount;
+        this.stock = stock;
+    }
+
     public String getIsbn() {
         return isbn;
     }
@@ -47,20 +57,40 @@ public class Book {
         return title;
     }
 
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
     public String getAuthor() {
         return author;
+    }
+
+    public void setAuthor(String author) {
+        this.author = author;
     }
 
     public Genre getGenre() {
         return genre;
     }
 
+    public void setGenre(Genre genre) {
+        this.genre = genre;
+    }
+
     public Language getLanguage() {
         return language;
     }
 
+    public void setLanguage(Language language) {
+        this.language = language;
+    }
+
     public int getAmount() {
         return amount;
+    }
+
+    public void setAmount(int amount) {
+        this.amount = amount;
     }
 
     public int getStock() {

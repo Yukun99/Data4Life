@@ -47,6 +47,9 @@ public class User {
     @Column(nullable = false, length = 20)
     private Avatar avatar;
 
+    @Column(name = "catalogue_columns", length = 100)
+    private String catalogueColumns;
+
     @ManyToMany
     @JoinTable(name = "user_genres", joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "genre_id"))
@@ -115,6 +118,14 @@ public class User {
 
     public void setAvatar(Avatar avatar) {
         this.avatar = avatar;
+    }
+
+    public String getCatalogueColumns() {
+        return catalogueColumns;
+    }
+
+    public void setCatalogueColumns(String catalogueColumns) {
+        this.catalogueColumns = catalogueColumns;
     }
 
     public Set<Genre> getGenres() {

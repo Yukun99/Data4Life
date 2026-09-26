@@ -1,10 +1,8 @@
+import { NamedItem } from '@/common/types';
 import { apiFetch, errorMessage } from '@/common/utils/api';
 import { useEffect, useState } from 'react';
 
-export type NamedItem = {
-  id: number;
-  name: string;
-};
+export type { NamedItem };
 
 export type InterestOptions = {
   genres: NamedItem[];

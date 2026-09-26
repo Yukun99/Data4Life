@@ -18,7 +18,8 @@ paths:
 - Package by feature under `com.yukunxu.data4life`: `ping/` holds `PingController`
   (`GET /api/ping`), `user/` holds the `users` table, sign-up (`POST /api/users`), profile edits
   (`PUT /api/users/me`) and the `UserDetailsService`, `auth/` holds login, logout and the current
-  user (`/api/auth/*`), `catalogue/` holds the books, genres and languages tables (no endpoints yet),
+  user (`/api/auth/*`), `catalogue/` holds the books, genres and languages tables and the admin book endpoints
+  (`BookController`, `BookService`, `/api/books`),
   `interest/` holds a user's genre and language interests (`/api/interests`), `loan/` holds loans,
   fines and payments (`/api/loans`), and `config/` holds the security setup and the JSON error
   handler. A new feature gets its own package with its controller, service, repository
@@ -40,6 +41,9 @@ paths:
   `/actuator/health`. Everything else needs a session and answers `401` without one, including
   `PUT /api/users/me`, `/api/interests/**` and `/api/loans/**`; there are no login redirects or
   forms.
+- `/api/books/**` and `/api/catalogue/**` are admin only, both as a URL rule in `SecurityConfig`
+  and through `@PreAuthorize` on `BookController` and `ColumnController`. Non-admins get
+  `403 { "message": "Forbidden" }`.
 - Users have an `is_admin` flag. The account whose email matches `ADMIN_EMAIL` becomes admin on
   sign-up, and `AdminPromoter` promotes it at startup if it already exists. Admins get `ROLE_ADMIN`
   on top of `ROLE_USER`, and `@EnableMethodSecurity` is on, so admin-only endpoints can use
@@ -62,6 +66,25 @@ paths:
 - Genres, languages and ten sample books are seeded by migrations. Loans last 14 days and overdue
   fines are $1.00 per started day (`LoanService`). A loan's status (borrowed, overdue, returned,
   unpaid, paid) and fine are derived from its dates, never stored.
+- A book's `stock` is always `amount` minus its open loans (loans with no return date). The
+  catalogue endpoints only take `amount` and recompute `stock`; an amount below the open loans is
+  rejected.
+
+## Catalogue Endpoints
+
+- `GET /api/books` lists books a page at a time. Query parameters: `page` (from 0, clamped to the
+  last page), `size` (10, 20 or 50), `sort` (`isbn`, `title`, `author`, `genre`, `language`,
+  `amount`, `stock`; default `title`) with `dir` (`asc` or `desc`), and exact-match filters `isbn`,
+  `title`, `author`, `genreId`, `languageId`, `amount`, `stock`. The response carries the page
+  actually returned and the filter options (distinct values across the whole catalogue).
+- `GET /api/books/{isbn}`, `POST /api/books` (409 when the ISBN exists), `PUT /api/books/{isbn}`
+  (changing the ISBN moves the book's loans to the new ISBN; 409 when the new ISBN exists),
+  `POST /api/books/{isbn}/merge` (merges the book into the one named in the body, moving its
+  loans) and `DELETE /api/books/{isbn}` (409 when the book has any loan records).
+- `GET` and `PUT /api/catalogue/columns` read and save the admin's catalogue column widths (six
+  percentages that must total 100, each at least 5). They are stored per user in
+  `users.catalogue_columns` as a comma separated string; `GET` answers an empty body until the
+  user has saved once.
 - `LoanSeeder` gives every user without loans five sample loans at startup, one per status. It
   carries a `TODO` to remove it once the borrow and return flow creates real loans.
 
@@ -70,8 +93,8 @@ paths:
 - Tests mirror the main package under `src/test/java`. `Data4LifeApplicationTests` boots the full
   context; `PingControllerTest` is a `@WebMvcTest` slice (it uses `@WithMockUser`, because the
   slice does not load `SecurityConfig`). `UserFlowTest` covers the whole sign-up and login flow
-  through `MockMvc`, carrying the session between requests; `InterestFlowTest` and `LoanFlowTest`
-  do the same for their routes, and `LoanServiceTest` covers every loan status and fine rule.
+  through `MockMvc`, carrying the session between requests; `InterestFlowTest`, `LoanFlowTest` and
+  `BookFlowTest` and `ColumnFlowTest` do the same for their routes, and `LoanServiceTest` covers every loan status and fine rule.
 - Full-context tests carry `@ActiveProfiles("test")`, which loads `application-test.yml` (H2
   in-memory, PostgreSQL mode) on top of `application.yml`. Keep it a profile file rather than a
   second `application.yml`, because a test `application.yml` would shadow the main one entirely.
