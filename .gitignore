@@ -1,0 +1,46 @@
+# Compiled output
+dist
+out-tsc
+target
+tmp
+*.class
+
+# Dependencies
+node_modules
+
+# Nx
+.nx/
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.settings/
+*.iml
+*.launch
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Claude Code local files
+.claude/worktrees
+.claude/settings.local.json
+.claude/rules/*.local.md
+CLAUDE.local.md
+
+# Test results
+vite.config.*.timestamp*
+vitest.config.*.timestamp*
+test-output
+coverage
+
+# Local config and secrets
+.env
+.env.local
+.env.*.local
+
+# System files
+.DS_Store
+Thumbs.db

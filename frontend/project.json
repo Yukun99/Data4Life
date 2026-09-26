@@ -1,0 +1,16 @@
+{
+  "name": "frontend",
+  "$schema": "node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "./src",
+  "projectType": "application",
+  "tags": [],
+  "// targets": "inferred from the plugins in nx.json; the two below widen them to cover test/",
+  "targets": {
+    "lint": {
+      "options": { "command": "eslint ./src ./test ./vite.config.mts ./eslint.config.mjs" }
+    },
+    "typecheck": {
+      "options": { "command": "tsc -b --pretty" }
+    }
+  }
+}

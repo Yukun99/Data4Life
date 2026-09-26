@@ -1,0 +1,44 @@
+# Runs the whole site on one Docker host: Nginx (static frontend + /api proxy), the backend and PostgreSQL.
+# Copy .env.example to .env first, then `docker compose up -d --build`.
+
+services:
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '8088:80'
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # A reverse proxy or tunnel client (Caddy, Traefik, cloudflared, ...) goes here: it joins this
+  # compose network and forwards the public hostname to http://web:80, after which the `8088:80`
+  # port mapping can be removed.
+
+volumes:
+  db-data:

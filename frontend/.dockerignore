@@ -1,0 +1,8 @@
+node_modules
+dist
+out-tsc
+test-output
+.nx
+.env
+.env.*
+Dockerfile
