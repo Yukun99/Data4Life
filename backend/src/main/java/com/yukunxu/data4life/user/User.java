@@ -28,6 +28,9 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "is_admin", nullable = false)
+    private boolean admin;
+
     protected User() {
     }
 
@@ -36,6 +39,7 @@ public class User {
         this.name = name;
         this.passwordHash = passwordHash;
         this.createdAt = Instant.now();
+        this.admin = false;
     }
 
     public Long getId() {
@@ -56,5 +60,13 @@ public class User {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isAdmin() {
+        return admin;
+    }
+
+    public void setAdmin(boolean admin) {
+        this.admin = admin;
     }
 }

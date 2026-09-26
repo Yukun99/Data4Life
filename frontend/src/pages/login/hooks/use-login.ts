@@ -1,10 +1,11 @@
-import useAuth from '@/common/hooks/use-auth';
 import { errorMessage } from '@/common/utils/api';
+import { useAppDispatch } from '@/store/hooks';
+import { login } from '@/store/user-slice';
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 const useLogin = () => {
-  const { login } = useAuth();
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,10 +17,10 @@ const useLogin = () => {
     setError('');
     setSubmitting(true);
     try {
-      await login(email, password);
-      navigate('/profile');
+      await dispatch(login({ email, password })).unwrap();
+      navigate('/');
     } catch (err) {
-      setError(errorMessage(err));
+      setError(typeof err === 'string' ? err : errorMessage(err));
     } finally {
       setSubmitting(false);
     }

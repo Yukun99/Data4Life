@@ -1,5 +1,6 @@
-import useAuth from '@/common/hooks/use-auth';
 import { apiFetch, errorMessage } from '@/common/utils/api';
+import { useAppDispatch } from '@/store/hooks';
+import { login } from '@/store/user-slice';
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -19,7 +20,7 @@ const validate = ({ name, email, password }: Fields): Fields => ({
 });
 
 const useCreate = () => {
-  const { login } = useAuth();
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [fields, setFields] = useState<Fields>(empty);
   const [fieldErrors, setFieldErrors] = useState<Fields>(empty);
@@ -40,10 +41,10 @@ const useCreate = () => {
     setSubmitting(true);
     try {
       await apiFetch('/api/users', { method: 'POST', body: JSON.stringify(fields) });
-      await login(fields.email, fields.password);
-      navigate('/profile');
+      await dispatch(login({ email: fields.email, password: fields.password })).unwrap();
+      navigate('/');
     } catch (err) {
-      setError(errorMessage(err));
+      setError(typeof err === 'string' ? err : errorMessage(err));
     } finally {
       setSubmitting(false);
     }

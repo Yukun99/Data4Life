@@ -25,7 +25,7 @@ paths:
 - Request and response bodies are Java records. No Lombok.
 - Constructor injection only; no field `@Autowired`.
 - Configuration comes from `application.yml` and is overridable with environment variables:
-  `DB_URL`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`.
+  `DB_URL`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `ADMIN_EMAIL` (read as `app.admin-email`).
   Never commit real credentials; `docker-compose.yml` reads them from the gitignored `.env`.
 
 ## Security
@@ -36,6 +36,10 @@ paths:
 - Public routes: `POST /api/users`, `POST /api/auth/login`, `GET /api/ping` and
   `/actuator/health`. Everything else needs a session and answers `401` without one; there are no
   login redirects or forms.
+- Users have an `is_admin` flag. The account whose email matches `ADMIN_EMAIL` becomes admin on
+  sign-up, and `AdminPromoter` promotes it at startup if it already exists. Admins get `ROLE_ADMIN`
+  on top of `ROLE_USER`, and `@EnableMethodSecurity` is on, so admin-only endpoints can use
+  `@PreAuthorize("hasRole('ADMIN')")`.
 - CSRF protection is off because the site is same-origin and the API only accepts JSON.
 - Errors come back as `{ "message": "..." }` from `ApiExceptionHandler`: `400` for validation, `401`
   for bad credentials and `409` for an email that is already taken.

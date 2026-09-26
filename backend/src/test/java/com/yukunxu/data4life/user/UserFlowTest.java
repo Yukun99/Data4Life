@@ -33,6 +33,7 @@ class UserFlowTest {
                 .andExpect(jsonPath("$.name").value("Ada"))
                 .andExpect(jsonPath("$.email").value("ada@example.com"))
                 .andExpect(jsonPath("$.createdAt").isString())
+                .andExpect(jsonPath("$.admin").value(false))
                 .andExpect(jsonPath("$.password").doesNotExist());
 
         MockHttpSession session = (MockHttpSession) login("ADA@example.com", "secret123")
@@ -42,13 +43,29 @@ class UserFlowTest {
 
         mockMvc.perform(get("/api/auth/me").session(session))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Ada"));
+                .andExpect(jsonPath("$.name").value("Ada"))
+                .andExpect(jsonPath("$.admin").value(false));
 
         mockMvc.perform(post("/api/auth/logout").session(session))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/api/auth/me").session(session))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void adminEmailGetsAdminFlag() throws Exception {
+        createUser("Admin", "admin@example.com", "secret123")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.admin").value(true));
+
+        MockHttpSession session = (MockHttpSession) login("admin@example.com", "secret123")
+                .andExpect(status().isOk())
+                .andReturn().getRequest().getSession();
+
+        mockMvc.perform(get("/api/auth/me").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.admin").value(true));
     }
 
     @Test

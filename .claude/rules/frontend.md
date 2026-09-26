@@ -13,12 +13,15 @@ declares none.
 
 `src/`, imported through the `@/*` alias:
 
-- `app/` — shell: `app.tsx`, later routes and document title
+- `app/` — shell: `app.tsx`, routes, route guards, layout and document title
 - `pages/<page>/` — one route each, with page-local `components/`, `hooks/`, `utils/`
 - `features/` — cross-page chrome (navigation, footer)
-- `common/` — reusable components, hooks, contexts, utils
+- `store/` — the Redux Toolkit store, its typed hooks (`useAppDispatch`, `useAppSelector`) and
+  slices
+- `common/` — reusable components, hooks, utils; it must not import from `store/`
 
-Imports only point downwards through the layers `app/` → `pages/` → `features/` → `common/`.
+Imports only point downwards through the layers `app/` → `pages/` → `features/` → `store/` →
+`common/`.
 `eslint.config.mjs` enforces this with `no-restricted-imports`, and `import/no-cycle` rejects import
 cycles. Only `app/` exists at first; create the others when something belongs there.
 
@@ -41,15 +44,24 @@ cycles. Only `app/` exists at first; create the others when something belongs th
 ## UI And Routing
 
 - MUI (`@mui/material`, `@mui/icons-material`, Emotion) for components and `react-router` for
-  routing. `app/routes.tsx` declares the routes: `/login`, `/create` and `/profile`, with `/` and
-  unknown paths sent to `/profile`. `app/require-auth.tsx` guards them: `/profile` needs a login and
-  `/login` and `/create` (the `guest` routes) send a logged-in user to `/profile`.
-- The theme lives in `app/theme.ts`. Light mode is `#000076` on `#FFDACF`, dark mode is the inverse,
-  and the mode follows the system preference (`colorSchemeSelector: 'media'`); there is no toggle.
-  Take colours from the theme palette rather than hard-coding them.
-- `common/contexts/auth-context.tsx` loads the current user from `GET /api/auth/me` once on start and
-  offers `login` and `logout`; read it through `common/hooks/use-auth.ts`. Call the backend through
-  `apiFetch` in `common/utils/api.ts`, which throws an `ApiError` carrying the backend's message.
+  routing. `app/routes.tsx` declares the routes. `/login` and `/create` are guest routes, and
+  `app/require-auth.tsx` sends a logged-in user from them to `/`. `/`, `/borrow`, `/return`,
+  `/reserve` and `/profile` need a login and render inside `app/layout.tsx`, which adds the header.
+  `/users` and `/catalogue` are also wrapped in `app/require-admin.tsx`, which sends non-admins to
+  `/`. Unknown paths go to `/`.
+- `features/navigation/` holds the header (menu button, `Library` title, theme toggle), the nav
+  drawer and `pages.ts`, the list of pages with their labels, icons and admin flag.
+  `app/document-title.tsx` sets the tab title to `Library - <Page>` from that list.
+- The theme lives in `app/theme.ts`. Light mode is `#000076` on `#FFDACF`, dark mode is the inverse.
+  The header toggle switches modes through MUI's `useColorScheme`, which stores the choice as
+  `mui-mode` in localStorage and sets `data-mui-color-scheme` on `<html>`; until the user picks one
+  the mode follows the system. An inline script in `index.html` applies the stored mode before the
+  app loads, so a reload does not flash. Take colours from the theme palette rather than hard-coding
+  them. The favicon is `public/favicon.svg`.
+- The `user` slice in `store/user-slice.ts` holds the current user (`fetchMe` loads it from
+  `GET /api/auth/me` on start) and offers the `login` and `logout` thunks and the `selectUser`,
+  `selectUserLoading` and `selectIsAdmin` selectors. Call the backend through `apiFetch` in
+  `common/utils/api.ts`, which throws an `ApiError` carrying the backend's message.
 
 ## Tests
 
@@ -62,8 +74,9 @@ Test files are typed by `tsconfig.spec.json`, never included in `tsconfig.app.js
 - Every input, button and error message has a `data-testid` named `<page>-<thing>`, such as
   `login-email` or `create-error`. On a MUI `TextField`, put it on the input through
   `slotProps={{ htmlInput: { 'data-testid': '...' } }}`. Tests look elements up by these ids.
-- Page specs render the page inside `AuthProvider` and a `MemoryRouter`, and stub the backend with
-  `test/mock-fetch.ts`, which answers `fetch` calls by `"METHOD /path"`.
+- Page specs render the page inside `withStore` from `test/with-store.tsx` (a fresh store with a
+  preloaded user; sample users live in `test/users.ts`) and a `MemoryRouter`, and stub the backend
+  with `test/mock-fetch.ts`, which answers `fetch` calls by `"METHOD /path"`.
 
 ## Dev Server And API
 

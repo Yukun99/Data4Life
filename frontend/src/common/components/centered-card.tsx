@@ -9,7 +9,7 @@ type CenteredCardProps = {
 };
 
 const CenteredCard = ({ title, children }: CenteredCardProps) => (
-  <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2 }}>
+  <Box sx={{ height: '100%', display: 'grid', placeItems: 'center', p: 2 }}>
     <Paper variant="outlined" sx={{ p: 4, width: '100%', maxWidth: 400 }}>
       <Typography variant="h5" component="h1" gutterBottom>
         {title}

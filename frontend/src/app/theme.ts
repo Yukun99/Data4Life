@@ -4,7 +4,7 @@ const navy = '#000076';
 const peach = '#FFDACF';
 
 const theme = createTheme({
-  cssVariables: { colorSchemeSelector: 'media' },
+  cssVariables: { colorSchemeSelector: 'data-mui-color-scheme' },
   colorSchemes: {
     light: {
       palette: {

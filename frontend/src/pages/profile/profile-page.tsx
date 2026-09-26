@@ -1,14 +1,16 @@
 import CenteredCard from '@/common/components/centered-card';
-import useAuth from '@/common/hooks/use-auth';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useNavigate } from 'react-router';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { logout, selectUser } from '@/store/user-slice';
 
 const ProfilePage = () => {
-  const { user, logout } = useAuth();
+  const user = useAppSelector(selectUser);
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
   if (!user) {
@@ -16,7 +18,7 @@ const ProfilePage = () => {
   }
 
   const handleLogout = async () => {
-    await logout();
+    await dispatch(logout());
     navigate('/login');
   };
 

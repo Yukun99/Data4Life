@@ -3,8 +3,9 @@ import nx from '@nx/eslint-plugin';
 const layer = (group, message) => ({ group, message });
 
 const NO_PAGES = layer(['@/pages/**'], 'Only app/ and pages/ may import from pages/.');
-const NO_FEATURES = layer(['@/features/**'], 'common/ must not import from features/.');
+const NO_FEATURES = layer(['@/features/**'], 'Only app/ and pages/ may import from features/.');
 const NO_APP = layer(['@/app/**'], 'Only the app shell may import from app/.');
+const NO_STORE = layer(['@/store/**'], 'common/ must not import from store/.');
 
 export default [
   ...nx.configs['flat/base'],
@@ -31,6 +32,12 @@ export default [
   },
   {
     files: ['src/common/**'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [NO_APP, NO_FEATURES, NO_PAGES, NO_STORE] }],
+    },
+  },
+  {
+    files: ['src/store/**'],
     rules: { 'no-restricted-imports': ['error', { patterns: [NO_APP, NO_FEATURES, NO_PAGES] }] },
   },
   {

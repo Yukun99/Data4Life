@@ -1,23 +1,23 @@
-import AuthProvider from '@/common/contexts/auth-context';
 import LoginPage from '@/pages/login/login-page';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import mockFetch from '../../mock-fetch';
+import { ada } from '../../users';
+import withStore from '../../with-store';
 
-const user = { id: 1, name: 'Ada', email: 'ada@example.com', createdAt: '2026-01-01T00:00:00Z' };
-
-const renderLogin = () =>
-  render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={['/login']}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/profile" element={<p>profile route</p>} />
-        </Routes>
-      </MemoryRouter>
-    </AuthProvider>,
+const renderLogin = () => {
+  const { store, ui } = withStore(
+    <MemoryRouter initialEntries={['/login']}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<p>home route</p>} />
+      </Routes>
+    </MemoryRouter>,
   );
+  render(ui);
+  return store;
+};
 
 const fillAndSubmit = async (password: string) => {
   await userEvent.type(screen.getByTestId('login-email'), 'ada@example.com');
@@ -26,13 +26,14 @@ const fillAndSubmit = async (password: string) => {
 };
 
 describe('LoginPage', () => {
-  it('posts the credentials and goes to the profile', async () => {
-    const fetchMock = mockFetch({ 'POST /api/auth/login': { status: 200, body: user } });
-    renderLogin();
+  it('posts the credentials, stores the user and goes home', async () => {
+    const fetchMock = mockFetch({ 'POST /api/auth/login': { status: 200, body: ada } });
+    const store = renderLogin();
 
     await fillAndSubmit('secret123');
 
-    expect(await screen.findByText('profile route')).toBeInTheDocument();
+    expect(await screen.findByText('home route')).toBeInTheDocument();
+    expect(store.getState().user.user).toEqual(ada);
     const loginCall = fetchMock.mock.calls.find(([path]) => path === '/api/auth/login');
     expect(JSON.parse(String(loginCall?.[1]?.body))).toEqual({
       email: 'ada@example.com',

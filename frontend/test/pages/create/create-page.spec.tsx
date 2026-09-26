@@ -1,22 +1,21 @@
-import AuthProvider from '@/common/contexts/auth-context';
 import CreatePage from '@/pages/create/create-page';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import mockFetch from '../../mock-fetch';
-
-const user = { id: 1, name: 'Ada', email: 'ada@example.com', createdAt: '2026-01-01T00:00:00Z' };
+import { ada as user } from '../../users';
+import withStore from '../../with-store';
 
 const renderCreate = () =>
   render(
-    <AuthProvider>
+    withStore(
       <MemoryRouter initialEntries={['/create']}>
         <Routes>
           <Route path="/create" element={<CreatePage />} />
-          <Route path="/profile" element={<p>profile route</p>} />
+          <Route path="/" element={<p>home route</p>} />
         </Routes>
-      </MemoryRouter>
-    </AuthProvider>,
+      </MemoryRouter>,
+    ).ui,
   );
 
 const fillAndSubmit = async (password = 'secret123') => {
@@ -27,7 +26,7 @@ const fillAndSubmit = async (password = 'secret123') => {
 };
 
 describe('CreatePage', () => {
-  it('posts the new user, logs in and goes to the profile', async () => {
+  it('posts the new user, logs in and goes home', async () => {
     const fetchMock = mockFetch({
       'POST /api/users': { status: 201, body: user },
       'POST /api/auth/login': { status: 200, body: user },
@@ -36,7 +35,7 @@ describe('CreatePage', () => {
 
     await fillAndSubmit();
 
-    expect(await screen.findByText('profile route')).toBeInTheDocument();
+    expect(await screen.findByText('home route')).toBeInTheDocument();
     const createCall = fetchMock.mock.calls.find(([path]) => path === '/api/users');
     expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({
       name: 'Ada',

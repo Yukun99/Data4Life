@@ -9,5 +9,6 @@ describe('App', () => {
 
     expect(await screen.findByTestId('login-email')).toBeInTheDocument();
     expect(window.location.pathname).toBe('/login');
+    expect(document.title).toBe('Library - Login');
   });
 });
