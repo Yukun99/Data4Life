@@ -1,8 +1,9 @@
 import HistoryPanel from '@/pages/profile/components/history-panel';
-import { History, Loan } from '@/pages/profile/hooks/use-history';
+import { History, Loan } from '@/store/history-slice';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import mockFetch from '../../../mock-fetch';
+import withStore from '../../../with-store';
 
 const day = 86400000;
 const iso = (offsetDays: number) => new Date(Date.now() + offsetDays * day).toISOString();
@@ -50,7 +51,7 @@ const paid: History = {
 describe('HistoryPanel', () => {
   it('shows the stats and one row per status', async () => {
     mockFetch({ 'GET /api/loans': { status: 200, body: history } });
-    render(<HistoryPanel />);
+    render(withStore(<HistoryPanel />).ui);
 
     expect(await screen.findByTestId('history-stat-borrowed')).toHaveTextContent('5');
     expect(screen.getByTestId('history-stat-genre')).toHaveTextContent('Fantasy');
@@ -76,7 +77,7 @@ describe('HistoryPanel', () => {
       'GET /api/loans': { status: 200, body: history },
       'POST /api/loans/4/pay': { status: 200, body: paid },
     });
-    render(<HistoryPanel />);
+    render(withStore(<HistoryPanel />).ui);
 
     await userEvent.click(await screen.findByTestId('loan-pay-4'));
 
@@ -95,7 +96,7 @@ describe('HistoryPanel', () => {
       'GET /api/loans': { status: 200, body: history },
       'POST /api/loans/pay-all': { status: 200, body: paid },
     });
-    render(<HistoryPanel />);
+    render(withStore(<HistoryPanel />).ui);
 
     await userEvent.click(await screen.findByTestId('history-pay-all'));
 
@@ -104,6 +105,20 @@ describe('HistoryPanel', () => {
       '/api/loans/pay-all',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('shows the pay error and keeps the history', async () => {
+    mockFetch({
+      'GET /api/loans': { status: 200, body: history },
+      'POST /api/loans/4/pay': { status: 400, body: { message: 'Nothing to pay' } },
+    });
+    render(withStore(<HistoryPanel />).ui);
+
+    await userEvent.click(await screen.findByTestId('loan-pay-4'));
+
+    expect(await screen.findByTestId('history-error')).toHaveTextContent('Nothing to pay');
+    expect(screen.getByTestId('loan-pay-4')).toBeEnabled();
+    expect(screen.getByTestId('history-stat-fines')).toHaveTextContent('$6.00');
   });
 
   it('shows the empty state', async () => {
@@ -121,7 +136,7 @@ describe('HistoryPanel', () => {
         },
       },
     });
-    render(<HistoryPanel />);
+    render(withStore(<HistoryPanel />).ui);
 
     expect(await screen.findByTestId('history-empty')).toHaveTextContent('No borrows yet');
     expect(screen.getByTestId('history-stat-genre')).toHaveTextContent('–');
@@ -130,7 +145,7 @@ describe('HistoryPanel', () => {
 
   it('shows the backend error', async () => {
     mockFetch({ 'GET /api/loans': { status: 500, body: { message: 'Server down' } } });
-    render(<HistoryPanel />);
+    render(withStore(<HistoryPanel />).ui);
 
     expect(await screen.findByTestId('history-error')).toHaveTextContent('Server down');
     expect(screen.queryByTestId('history-loading')).not.toBeInTheDocument();
@@ -138,7 +153,7 @@ describe('HistoryPanel', () => {
 
   it('shows a spinner while loading', async () => {
     mockFetch({ 'GET /api/loans': { status: 200, body: history } });
-    render(<HistoryPanel />);
+    render(withStore(<HistoryPanel />).ui);
 
     expect(screen.getByTestId('history-loading')).toBeInTheDocument();
     expect(await screen.findByTestId('history-stat-borrowed')).toBeInTheDocument();

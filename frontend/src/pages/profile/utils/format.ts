@@ -1,4 +1,4 @@
-import { LoanStatus } from '@/pages/profile/hooks/use-history';
+import { LoanStatus } from '@/store/history-slice';
 
 const money = new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD' });
 

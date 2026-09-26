@@ -52,7 +52,10 @@ cycles. Only `app/` exists at first; create the others when something belongs th
 - `/profile` has two columns that stack on narrow screens. The left holds the profile card (edit
   name and icon) and the interests card (genres and languages, at most 10, with a first-time dialog
   that can be skipped). The right holds the History / Payments panel with loan stats, statuses and
-  fine payments. Its data loading lives in page-local hooks under `pages/profile/hooks/`.
+  fine payments. The loan history, its loading and error state and the `fetchHistory`,
+  `payLoan` and `payAllFines` thunks live in the `history` slice (`store/history-slice.ts`);
+  `pages/profile/hooks/use-history.ts` only dispatches them. The profile card and interests keep
+  their form state in page-local hooks under `pages/profile/hooks/`.
 - `/catalogue` is the admin book table. Paging, sorting and filtering all happen on the backend;
   the page only sends the page, size, sort and filter values. The list, those values and the
   filter options live in the `catalogue` slice (`store/catalogue-slice.ts`), which also holds the

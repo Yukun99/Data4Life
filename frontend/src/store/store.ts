@@ -1,8 +1,13 @@
 import { catalogueReducer } from '@/store/catalogue-slice';
+import { historyReducer } from '@/store/history-slice';
 import { userReducer } from '@/store/user-slice';
 import { combineReducers, configureStore } from '@reduxjs/toolkit';
 
-const rootReducer = combineReducers({ user: userReducer, catalogue: catalogueReducer });
+const rootReducer = combineReducers({
+  user: userReducer,
+  catalogue: catalogueReducer,
+  history: historyReducer,
+});
 
 export type RootState = ReturnType<typeof rootReducer>;
 

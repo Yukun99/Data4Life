@@ -1,4 +1,4 @@
-import { Loan, LoanStatus } from '@/pages/profile/hooks/use-history';
+import { Loan, LoanStatus } from '@/store/history-slice';
 import { daysUntil, formatDate, formatMoney, statusLabel } from '@/pages/profile/utils/format';
 import Button from '@mui/material/Button';
 import Chip, { ChipProps } from '@mui/material/Chip';
