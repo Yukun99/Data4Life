@@ -16,7 +16,9 @@ paths:
 ## Layout
 
 - Package by feature under `com.yukunxu.data4life`: `ping/` holds `PingController`
-  (`GET /api/ping`). A new feature gets its own package with its controller, service, repository
+  (`GET /api/ping`), `user/` holds the `users` table, sign-up (`POST /api/users`) and the
+  `UserDetailsService`, `auth/` holds login, logout and the current user (`/api/auth/*`), and
+  `config/` holds the security setup and the JSON error handler. A new feature gets its own package with its controller, service, repository
   and entities together; cross-cutting configuration goes in a `config/` package when needed.
 - Every HTTP route sits under `/api/`; that prefix is what the Vite dev proxy and the Nginx
   container route to the backend. The backend is never exposed directly, so there is no CORS setup.
@@ -26,6 +28,18 @@ paths:
   `DB_URL`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`.
   Never commit real credentials; `docker-compose.yml` reads them from the gitignored `.env`.
 
+## Security
+
+- Spring Security with a server-side session: `POST /api/auth/login` checks the email and BCrypt
+  password hash and stores the login in the HTTP session, so the browser only carries the session
+  cookie. `POST /api/auth/logout` invalidates it and `GET /api/auth/me` returns the current user.
+- Public routes: `POST /api/users`, `POST /api/auth/login`, `GET /api/ping` and
+  `/actuator/health`. Everything else needs a session and answers `401` without one; there are no
+  login redirects or forms.
+- CSRF protection is off because the site is same-origin and the API only accepts JSON.
+- Errors come back as `{ "message": "..." }` from `ApiExceptionHandler`: `400` for validation, `401`
+  for bad credentials and `409` for an email that is already taken.
+
 ## Database
 
 - PostgreSQL in production and local development. `spring.jpa.hibernate.ddl-auto` is `validate`, so
@@ -34,11 +48,15 @@ paths:
   mode also accepts; the test run will tell you when it does not.
 - Local development needs a PostgreSQL reachable at `localhost:5432` with database, user and
   password `data4life` (the defaults in `application.yml`), or `DB_*` variables pointing elsewhere.
+  Install PostgreSQL 17 and create the role and database once, as shown in the README. Flyway creates
+  the tables on the first `./mvnw spring-boot:run`.
 
 ## Tests
 
 - Tests mirror the main package under `src/test/java`. `Data4LifeApplicationTests` boots the full
-  context; `PingControllerTest` is a `@WebMvcTest` slice.
+  context; `PingControllerTest` is a `@WebMvcTest` slice (it uses `@WithMockUser`, because the
+  slice does not load `SecurityConfig`). `UserFlowTest` covers the whole sign-up and login flow
+  through `MockMvc`, carrying the session between requests.
 - Full-context tests carry `@ActiveProfiles("test")`, which loads `application-test.yml` (H2
   in-memory, PostgreSQL mode) on top of `application.yml`. Keep it a profile file rather than a
   second `application.yml`, because a test `application.yml` would shadow the main one entirely.

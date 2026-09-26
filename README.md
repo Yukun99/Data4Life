@@ -42,6 +42,40 @@ cd backend
 
 `GET /api/ping` returns `{ "status": "ok" }`; `GET /actuator/health` reports liveness.
 
+### Local Database
+
+Install PostgreSQL 17 (on Windows: `winget install PostgreSQL.PostgreSQL.17`), then create the role
+and database the backend expects by default:
+
+```sh
+psql -U postgres -c "CREATE ROLE data4life LOGIN PASSWORD 'data4life'"
+psql -U postgres -c "CREATE DATABASE data4life OWNER data4life"
+```
+
+Flyway creates the tables the first time the backend starts.
+
+## User Management
+
+The app has three pages: `/create` (sign up), `/login` and `/profile`. Assumptions made:
+
+- A user is a name, an email and a password. The email is the login name, is unique and is stored in
+  lower case.
+- Passwords are 8 to 32 characters with no spaces and are stored only as BCrypt hashes.
+- Creating an account logs the new user in straight away.
+- Logins use a server-side session cookie, not tokens. The site is same-origin, so there is no CORS
+  and CSRF protection is off for the JSON API.
+- There are no roles, password resets or profile edits yet.
+- The colour scheme follows the system's light or dark mode.
+
+| Method | Path               | Body                        | Result                                  |
+|--------|--------------------|-----------------------------|-----------------------------------------|
+| POST   | `/api/users`       | `{ name, email, password }` | `201` user, `400` invalid, `409` taken  |
+| POST   | `/api/auth/login`  | `{ email, password }`       | `200` user and session cookie, or `401` |
+| POST   | `/api/auth/logout` |                             | `204`                                   |
+| GET    | `/api/auth/me`     |                             | `200` user, or `401` when logged out    |
+
+A user is returned as `{ id, name, email, createdAt }`; errors as `{ message }`.
+
 ## Deploy
 
 On the Docker host, copy `.env.example` to `.env`, set the database password, then:

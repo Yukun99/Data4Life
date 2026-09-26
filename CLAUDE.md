@@ -28,8 +28,8 @@ hosting environment (devices, providers, domains, accounts) live only in gitigno
 - Start every session in caveman ultra mode: run `/caveman ultra` before anything else.
 - Before a large task, ask the developer to run `/clear` (Claude cannot) and restate the task, unless
   the session is already fresh.
-- For big tasks, enter plan mode first. Raise every doubt as a question instead of assuming, and only
-  start once the doubts are answered and the plan is confirmed.
+- For big tasks, follow the Big Task Process below.
+- Keep things as simple as possible. Don't build beyond what the current feature needs.
 - Never run Prettier manually. The IDE formats on save.
 - Don't run `nx configure-ai-agents` or similar; it regenerates config for other AI tools, which this
   repo intentionally does not keep.
@@ -44,6 +44,24 @@ hosting environment (devices, providers, domains, accounts) live only in gitigno
 - Naming: prefer the shortest name that still explains the thing clearly. `fetchWeather`, not
   `fetchWeatherDataFromApi` and not `fw`.
 - For anything not covered here with no clear industry standard, ask the developer before choosing.
+
+## Big Task Process
+
+1. Plan the task in plan mode.
+2. The developer vets the plan. Ask about every unclear part and assume nothing; only continue once
+   every question is answered and the plan is confirmed.
+3. Implement the plan in a child Opus 5.5 agent (the `Agent` tool with `model: opus`), handing it the
+   plan as written.
+4. Check the child's result against the After Every Task list below.
+5. Give the developer a summary of what changed and what to test.
+
+## After Every Task
+
+- Update the local database (run the backend so Flyway applies new migrations) and restart the dev
+  servers so they pick up the change.
+- Write tests for new behaviour. Every input, button and error message gets a `data-testid`.
+- Check the change in the browser, including the error cases.
+- Leave the dev servers running until the next restart is needed.
 
 ## Commands
 

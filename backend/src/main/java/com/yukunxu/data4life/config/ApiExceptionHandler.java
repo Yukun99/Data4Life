@@ -1,0 +1,34 @@
+package com.yukunxu.data4life.config;
+
+import com.yukunxu.data4life.user.EmailTakenException;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class ApiExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse invalid(MethodArgumentNotValidException ex) {
+        return new ErrorResponse(ex.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + " " + error.getDefaultMessage())
+                .findFirst()
+                .orElse("Invalid request"));
+    }
+
+    @ExceptionHandler(EmailTakenException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse emailTaken(EmailTakenException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ErrorResponse badCredentials() {
+        return new ErrorResponse("Incorrect email or password");
+    }
+}

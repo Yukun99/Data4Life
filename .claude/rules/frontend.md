@@ -38,6 +38,19 @@ cycles. Only `app/` exists at first; create the others when something belongs th
 - `tsc` output (declarations, build info) goes to `out-tsc/`; Vite output goes to `dist/`. Both are
   gitignored.
 
+## UI And Routing
+
+- MUI (`@mui/material`, `@mui/icons-material`, Emotion) for components and `react-router` for
+  routing. `app/routes.tsx` declares the routes: `/login`, `/create` and `/profile`, with `/` and
+  unknown paths sent to `/profile`. `app/require-auth.tsx` guards them: `/profile` needs a login and
+  `/login` and `/create` (the `guest` routes) send a logged-in user to `/profile`.
+- The theme lives in `app/theme.ts`. Light mode is `#000076` on `#FFDACF`, dark mode is the inverse,
+  and the mode follows the system preference (`colorSchemeSelector: 'media'`); there is no toggle.
+  Take colours from the theme palette rather than hard-coding them.
+- `common/contexts/auth-context.tsx` loads the current user from `GET /api/auth/me` once on start and
+  offers `login` and `logout`; read it through `common/hooks/use-auth.ts`. Call the backend through
+  `apiFetch` in `common/utils/api.ts`, which throws an `ApiError` carrying the backend's message.
+
 ## Tests
 
 Specs live in `test/` and keep the same path relative to `test/` as the file they test has relative
@@ -45,6 +58,12 @@ to `src/`: `src/features/footer/footer.tsx` is tested by `test/features/footer/f
 They run in jsdom with `globals: true`, so `describe`/`it`/`expect` need no import.
 `@testing-library/react`, `user-event` and `jest-dom` matchers (via `test/setup.ts`) are set up.
 Test files are typed by `tsconfig.spec.json`, never included in `tsconfig.app.json`.
+
+- Every input, button and error message has a `data-testid` named `<page>-<thing>`, such as
+  `login-email` or `create-error`. On a MUI `TextField`, put it on the input through
+  `slotProps={{ htmlInput: { 'data-testid': '...' } }}`. Tests look elements up by these ids.
+- Page specs render the page inside `AuthProvider` and a `MemoryRouter`, and stub the backend with
+  `test/mock-fetch.ts`, which answers `fetch` calls by `"METHOD /path"`.
 
 ## Dev Server And API
 
