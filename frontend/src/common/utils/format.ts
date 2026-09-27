@@ -22,6 +22,8 @@ export const statusLabel: Record<LoanStatus, string> = {
   FORGIVEN: 'Forgiven',
   RESERVED: 'Reserved',
   EXPIRED: 'Expired',
+  QUEUED: 'Queued',
+  REMOVED: 'Removed',
 };
 
 export const chipColor: Record<LoanStatus, ChipProps['color']> = {
@@ -33,4 +35,8 @@ export const chipColor: Record<LoanStatus, ChipProps['color']> = {
   FORGIVEN: 'info',
   RESERVED: 'secondary',
   EXPIRED: 'default',
+  QUEUED: 'info',
+  REMOVED: 'error',
 };
+
+export const queueText = (position: number) => `Number ${position} in queue`;

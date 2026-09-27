@@ -1,6 +1,7 @@
 import { borrowReducer } from '@/store/borrow-slice';
 import { catalogueReducer } from '@/store/catalogue-slice';
 import { historyReducer } from '@/store/history-slice';
+import { notificationReducer } from '@/store/notification-slice';
 import { returnReducer } from '@/store/return-slice';
 import { userReducer } from '@/store/user-slice';
 import { usersReducer } from '@/store/users-slice';
@@ -13,6 +14,7 @@ const rootReducer = combineReducers({
   users: usersReducer,
   borrow: borrowReducer,
   returns: returnReducer,
+  notifications: notificationReducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;

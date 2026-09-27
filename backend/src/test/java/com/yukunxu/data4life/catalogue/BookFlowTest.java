@@ -216,6 +216,28 @@ class BookFlowTest {
     }
 
     @Test
+    void queuedRowsAreNotHeldAndRaisingAmountServesTheQueue() throws Exception {
+        openLoan(DUNE);
+        openLoan(DUNE);
+        openLoan(DUNE);
+        Book dune = bookRepository.findById(DUNE).orElseThrow();
+        dune.setStock(0);
+        User bob = userRepository.save(new User("bob@example.com", "Bob", "hash"));
+        Loan queued = loanRepository.save(Loan.queued(bob, dune, Instant.now()));
+
+        send(put("/api/books/{isbn}", DUNE), body(DUNE, "Dune", fantasyId, englishId, 3))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stock").value(0));
+        assertThat(queued.getReservedUntil()).isNull();
+
+        send(put("/api/books/{isbn}", DUNE), body(DUNE, "Dune", fantasyId, englishId, 5))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.amount").value(5))
+                .andExpect(jsonPath("$.stock").value(1));
+        assertThat(queued.getReservedUntil()).isNotNull();
+    }
+
+    @Test
     void updateIsbnRepointsLoans() throws Exception {
         Loan loan = openLoan(DUNE);
 

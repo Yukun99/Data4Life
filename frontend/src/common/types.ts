@@ -11,7 +11,9 @@ export type LoanStatus =
   | 'PAID'
   | 'FORGIVEN'
   | 'RESERVED'
-  | 'EXPIRED';
+  | 'EXPIRED'
+  | 'QUEUED'
+  | 'REMOVED';
 
 export type Loan = {
   id: number;

@@ -39,7 +39,13 @@ const detail = ({ status, dueAt, reservedUntil, overdueDays, fine, fee }: Loan) 
     case 'RESERVED':
       return `Reserved until ${formatDate(reservedUntil ?? '')} · ${formatMoney(fee)} fee paid`;
     case 'EXPIRED':
-      return `Reservation expired · ${formatMoney(fee)} fee paid`;
+      return reservedUntil
+        ? `Reservation expired · ${formatMoney(fee)} fee paid`
+        : `Left the queue · ${formatMoney(fee)} fee paid`;
+    case 'QUEUED':
+      return `In queue · ${formatMoney(fee)} fee paid`;
+    case 'REMOVED':
+      return `Removed from queue · ${formatMoney(fee)} fee paid`;
     case 'RETURNED':
       return '';
   }

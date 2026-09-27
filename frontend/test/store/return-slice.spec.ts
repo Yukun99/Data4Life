@@ -31,6 +31,7 @@ const loan: ReturnLoan = {
   reservedUntil: null,
   overdueDays: 0,
   fine: 0,
+  queuePosition: null,
 };
 
 const filters = {
@@ -87,6 +88,27 @@ describe('return slice', () => {
       totalUnpaid: 6,
       loading: false,
     });
+  });
+
+  it('fetchReturnLoans keeps a queued row with its position', async () => {
+    const queued: ReturnLoan = {
+      ...loan,
+      id: 8,
+      status: 'QUEUED',
+      dueAt: null,
+      queuePosition: 2,
+    };
+    mockFetch({
+      'GET /api/return?page=0&size=10': {
+        status: 200,
+        body: { loans: [queued], page: 0, totalPages: 1, total: 1, filters, totalUnpaid: 0 },
+      },
+    });
+    const store = createStore();
+
+    await store.dispatch(fetchReturnLoans());
+
+    expect(store.getState().returns.loans).toEqual([queued]);
   });
 
   it('fetchReturnLoans sends the sort and filters in a fixed order', async () => {

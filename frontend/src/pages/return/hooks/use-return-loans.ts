@@ -1,4 +1,5 @@
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { selectNotifications } from '@/store/notification-slice';
 import {
   fetchReturnLoans,
   goTo,
@@ -10,11 +11,13 @@ import {
   switchSort,
   toggleSort,
 } from '@/store/return-slice';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 const useReturnLoans = () => {
   const dispatch = useAppDispatch();
   const returns = useAppSelector(selectReturns);
+  const { lastReceivedId } = useAppSelector(selectNotifications);
+  const seenId = useRef(lastReceivedId);
   const { page, size, sort, filter } = returns;
 
   useEffect(() => {
@@ -24,6 +27,13 @@ const useReturnLoans = () => {
   const reload = useCallback(() => {
     dispatch(fetchReturnLoans());
   }, [dispatch]);
+
+  useEffect(() => {
+    if (lastReceivedId !== seenId.current) {
+      seenId.current = lastReceivedId;
+      reload();
+    }
+  }, [lastReceivedId, reload]);
 
   return {
     ...returns,

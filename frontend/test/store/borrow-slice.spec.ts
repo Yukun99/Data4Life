@@ -1,5 +1,6 @@
 import {
   borrowBook,
+  clearFlash,
   DEFAULT_BORROW_COLUMN_WIDTHS,
   EMPTY_BORROW_FILTER,
   fetchBorrowBooks,
@@ -9,6 +10,7 @@ import {
   saveBorrowColumnWidths,
   setFilter,
   setSize,
+  showBook,
   switchSort,
   toggleSort,
 } from '@/store/borrow-slice';
@@ -23,6 +25,8 @@ const book = {
   language: { id: 1, name: 'English' },
   stock: 2,
   holding: null,
+  queuePosition: null,
+  queueLength: 0,
 };
 
 const filters = {
@@ -66,6 +70,7 @@ describe('borrow slice', () => {
       error: '',
       columnWidths: DEFAULT_BORROW_COLUMN_WIDTHS,
       actingIsbn: null,
+      flashIsbn: null,
     });
   });
 
@@ -129,6 +134,23 @@ describe('borrow slice', () => {
     expect(store.getState().borrow.sort).toEqual({ key: 'author', dir: 'desc' });
     store.dispatch(toggleSort('author'));
     expect(store.getState().borrow.sort).toBeNull();
+  });
+
+  it('showBook filters to one ISBN on the first page and flashes it until cleared', async () => {
+    const store = await loaded(3);
+    store.dispatch(setFilter({ ...EMPTY_BORROW_FILTER, title: 'Dune' }));
+    store.dispatch(goTo(2));
+
+    store.dispatch(showBook('111'));
+    expect(store.getState().borrow).toMatchObject({
+      filter: { ...EMPTY_BORROW_FILTER, isbn: '111' },
+      page: 0,
+      flashIsbn: '111',
+    });
+
+    store.dispatch(clearFlash());
+    expect(store.getState().borrow.flashIsbn).toBeNull();
+    expect(store.getState().borrow.filter.isbn).toBe('111');
   });
 
   it('borrowBook posts to the book and tracks the acting ISBN', async () => {

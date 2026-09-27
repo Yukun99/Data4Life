@@ -71,6 +71,14 @@ describe('Header', () => {
     await waitFor(() => expect(screen.queryByTestId('nav-borrow')).not.toBeInTheDocument());
   });
 
+  it('shows the notification bell just before the theme toggle', () => {
+    renderHeader(ada);
+
+    expect(screen.getByTestId('header-notifications').nextElementSibling).toBe(
+      screen.getByTestId('header-theme'),
+    );
+  });
+
   it('switches the document colour scheme between light and dark', async () => {
     renderHeader(ada);
 

@@ -6,7 +6,7 @@ import { apiFetch, errorMessage } from '@/common/utils/api';
 import { FilterOptions } from '@/store/catalogue-slice';
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-export type Holding = 'BORROWED' | 'RESERVED';
+export type Holding = 'BORROWED' | 'RESERVED' | 'QUEUED';
 
 export type BorrowBook = {
   isbn: string;
@@ -16,6 +16,8 @@ export type BorrowBook = {
   language: NamedItem;
   stock: number;
   holding: Holding | null;
+  queuePosition: number | null;
+  queueLength: number;
 };
 
 export type BorrowBooksResponse = {
@@ -86,6 +88,7 @@ export type BorrowState = {
   error: string;
   columnWidths: BorrowColumnWidths;
   actingIsbn: string | null;
+  flashIsbn: string | null;
 };
 
 const initialState: BorrowState = {
@@ -103,6 +106,7 @@ const initialState: BorrowState = {
   error: '',
   columnWidths: DEFAULT_BORROW_COLUMN_WIDTHS,
   actingIsbn: null,
+  flashIsbn: null,
 };
 
 type State = { borrow: BorrowState };
@@ -195,6 +199,14 @@ const borrowSlice = createSlice({
     setColumnWidths: (state, action: PayloadAction<BorrowColumnWidths>) => {
       state.columnWidths = action.payload;
     },
+    showBook: (state, action: PayloadAction<string>) => {
+      state.filter = { ...EMPTY_BORROW_FILTER, isbn: action.payload };
+      state.page = 0;
+      state.flashIsbn = action.payload;
+    },
+    clearFlash: (state) => {
+      state.flashIsbn = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -237,8 +249,16 @@ const borrowSlice = createSlice({
   },
 });
 
-export const { goTo, setSize, setFilter, toggleSort, switchSort, setColumnWidths } =
-  borrowSlice.actions;
+export const {
+  goTo,
+  setSize,
+  setFilter,
+  toggleSort,
+  switchSort,
+  setColumnWidths,
+  showBook,
+  clearFlash,
+} = borrowSlice.actions;
 
 export const selectBorrow = (state: State) => state.borrow;
 

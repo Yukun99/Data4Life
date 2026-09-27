@@ -42,6 +42,8 @@ const BorrowPage = () => {
         onToggleSort={books.toggleSort}
         onSwitchSort={books.switchSort}
         onAction={action.open}
+        flashIsbn={books.flashIsbn}
+        onFlashEnd={books.clearFlash}
       />
       <TablePagination
         page={books.page}

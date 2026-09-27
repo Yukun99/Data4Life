@@ -49,6 +49,9 @@ const loans: Loan[] = [
     reservedUntil: '2026-02-08T00:00:00Z',
     fee: 5,
   }),
+  loan(9, { status: 'QUEUED', borrowedAt: null, dueAt: null, reservedAt: iso(-1), fee: 5 }),
+  loan(10, { status: 'REMOVED', borrowedAt: null, dueAt: null, reservedAt: iso(-9), fee: 5 }),
+  loan(11, { status: 'EXPIRED', borrowedAt: null, dueAt: null, reservedAt: iso(-8), fee: 5 }),
 ];
 
 const history: History = {
@@ -111,6 +114,20 @@ describe('HistoryPanel', () => {
       'Reservation expired · $5.00 fee paid',
     );
     expect(screen.queryByTestId('loan-pay-7')).not.toBeInTheDocument();
+  });
+
+  it('shows queued, removed and left queue rows with their fee', async () => {
+    mockFetch({ 'GET /api/loans': { status: 200, body: history } });
+    render(withStore(<HistoryPanel />).ui);
+
+    expect(await screen.findByTestId('loan-status-9')).toHaveTextContent('Queued');
+    expect(screen.getByTestId('loan-detail-9')).toHaveTextContent('In queue · $5.00 fee paid');
+    expect(screen.getByTestId('loan-status-10')).toHaveTextContent('Removed');
+    expect(screen.getByTestId('loan-detail-10')).toHaveTextContent(
+      'Removed from queue · $5.00 fee paid',
+    );
+    expect(screen.getByTestId('loan-status-11')).toHaveTextContent('Expired');
+    expect(screen.getByTestId('loan-detail-11')).toHaveTextContent('Left the queue · $5.00 fee paid');
   });
 
   it('pays one loan and shows the refreshed history', async () => {

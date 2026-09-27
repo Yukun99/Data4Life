@@ -1,6 +1,13 @@
 import DataTable from '@/common/components/data-table/data-table';
 import { ColumnSpec } from '@/common/components/data-table/types';
-import { chipColor, formatDate, formatDays, formatMoney, statusLabel } from '@/common/utils/format';
+import {
+  chipColor,
+  formatDate,
+  formatDays,
+  formatMoney,
+  queueText,
+  statusLabel,
+} from '@/common/utils/format';
 import { ReturnAction } from '@/pages/return/hooks/use-return-action';
 import useReturnColumns from '@/pages/return/hooks/use-return-columns';
 import { ReturnColumnKey, ReturnLoan, ReturnSort, ReturnSortKey } from '@/store/return-slice';
@@ -26,6 +33,7 @@ const ROW_ACTION: Record<ReturnLoan['status'], RowAction> = {
   OVERDUE: 'return',
   UNPAID: 'pay',
   RESERVED: 'unreserve',
+  QUEUED: 'unreserve',
 };
 
 const ACTION_LABEL: Record<RowAction, string> = {
@@ -35,6 +43,9 @@ const ACTION_LABEL: Record<RowAction, string> = {
 };
 
 const detail = (loan: ReturnLoan) => {
+  if (loan.status === 'QUEUED') {
+    return loan.queuePosition === null ? '' : queueText(loan.queuePosition);
+  }
   if (loan.status === 'RESERVED') {
     return `Reserved until ${formatDate(loan.reservedUntil ?? '')}`;
   }
@@ -80,7 +91,7 @@ const ReturnTable = ({
         onClick={() => onAction(loan, action)}
         data-testid={`return-${action}-${loan.id}`}
       >
-        {ACTION_LABEL[action]}
+        {loan.status === 'QUEUED' ? 'Leave queue' : ACTION_LABEL[action]}
       </Button>
     );
   };

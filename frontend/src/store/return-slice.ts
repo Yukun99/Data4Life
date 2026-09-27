@@ -12,12 +12,13 @@ export type ReturnLoan = {
   author: string;
   genre: NamedItem;
   language: NamedItem;
-  status: 'BORROWED' | 'OVERDUE' | 'UNPAID' | 'RESERVED';
+  status: 'BORROWED' | 'OVERDUE' | 'UNPAID' | 'RESERVED' | 'QUEUED';
   dueAt: string | null;
   returnedAt: string | null;
   reservedUntil: string | null;
   overdueDays: number;
   fine: number;
+  queuePosition: number | null;
 };
 
 export type ReturnFilterOptions = {

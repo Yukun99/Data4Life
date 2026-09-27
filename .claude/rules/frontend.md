@@ -15,7 +15,7 @@ declares none.
 
 - `app/` — shell: `app.tsx`, routes, route guards, layout and document title
 - `pages/<page>/` — one route each, with page-local `components/`, `hooks/`, `utils/`
-- `features/` — cross-page chrome (navigation, footer)
+- `features/` — cross-page chrome (navigation, footer, notifications)
 - `store/` — the Redux Toolkit store, its typed hooks (`useAppDispatch`, `useAppSelector`) and
   slices
 - `common/` — reusable components, hooks, utils and shared types; it must not import from `store/`.
@@ -57,7 +57,9 @@ cycles. Only `app/` exists at first; create the others when something belongs th
   guard sends them to `/login`) and the interests card (genres and languages, at most 10, with a first-time dialog
   that can be skipped). The right holds the History / Payments panel with loan stats, statuses and
   fine payments; a fine an admin forgave shows a Forgiven chip and no Pay button. A reservation
-  shows as Reserved (with its end date) or Expired, both with the $5.00 fee that was paid. Pay and
+  shows as Reserved (with its end date) or Expired, both with the $5.00 fee that was paid. A queue
+  place shows as Queued, Removed (taken off the queue at assignment because of unpaid fines or an
+  overdue book) or Expired with "Left the queue", again with the fee. Pay and
   Pay all ask for confirmation first. The `Loan` and
   `LoanStatus` types live in `common/types.ts` and are re-exported by the history slice. The loan
   history, its loading and error state and the `fetchHistory`,
@@ -67,27 +69,33 @@ cycles. Only `app/` exists at first; create the others when something belongs th
 - `/borrow` lists the books for any logged-in user, built on the data table framework. Each row
   offers Borrow and Reserve (a reservation costs $5.00 and holds a copy for 7 days). A book the user
   has on loan shows a Borrowed chip and no buttons; a reserved book shows a Reserved chip and a
-  Borrow button that turns the reservation into a loan. The buttons are disabled, with a tooltip,
-  when the book is out of stock or when the backend sends a block reason (unpaid fines, an overdue
-  book, or 8 books held), which also shows as a banner above the table. The Borrow button on a
+  Borrow button that turns the reservation into a loan. Borrow is disabled, with a tooltip, when the
+  book is out of stock. Reserve stays enabled at stock 0: it joins the book's queue, and the confirm
+  dialog says which place the user will get. A queued book shows a chip with its place ("Number 2
+  in queue") and no buttons. Both buttons are disabled when the backend sends a block reason
+  (unpaid fines, an overdue book, or 8 books held, queue places included), which also shows as a
+  banner above the table. The Borrow button on a
   reserved row follows the response's `convertBlock` instead, so the 8 book cap does not disable
   it. The `borrow` slice
   (`store/borrow-slice.ts`) holds the list, its query values, the block reason, the column widths
-  (saved at `/api/borrow/columns`) and the thunks for every `/api/borrow` call.
+  (saved at `/api/borrow/columns`), the thunks for every `/api/borrow` call, and `flashIsbn`, which
+  `showBook` sets together with an ISBN filter so a notification can point at one row.
   `pages/borrow/hooks/use-borrow-action.ts` drives the confirm dialog and reloads the list after a
   change.
-- `/return` lists the user's open loans, active reservations and returned loans that still carry
-  an unpaid fine, built on the data table framework. The columns are ISBN, Title / Author,
+- `/return` lists the user's open loans, active reservations, queue places and returned loans that
+  still carry an unpaid fine, built on the data table framework. The columns are ISBN, Title / Author,
   Genre / Language, Status (a status chip over the due date, the reservation end date or the fine
   so far, sorted by that date) and Actions. An open loan offers Return, a reservation offers
-  Unreserve (the fee is not refunded), an unpaid row offers Pay fine, and a Pay all button in the
+  Unreserve (the fee is not refunded), a queue place shows its position and offers Leave queue
+  (also without a refund), an unpaid row offers Pay fine, and a Pay all button in the
   toolbar pays every unpaid fine (disabled when nothing is owed). Every action asks for
   confirmation first; returning an overdue book says what fine becomes payable. The `returns`
   slice (`store/return-slice.ts`) holds the list, its query values, the unpaid total, the column
   widths (saved at `/api/return/columns`) and the thunks for returning and unreserving
   (`/api/return`) and paying (`/api/loans`). `use-return-loans.ts` and
   `use-return-columns.ts` under `pages/return/hooks/` dispatch them, and `use-return-action.ts`
-  drives the confirm dialog and reloads the list after a change.
+  drives the confirm dialog and reloads the list after a change. Both the borrow and the return
+  list also reload when a live notification arrives (`lastReceivedId` in the notifications slice).
 - `common/components/confirm-dialog.tsx` is the shared confirm dialog (title, body, confirm label,
   error and loading state). It is used for borrowing and reserving, returning books and paying fines on
   the return page, paying fines on the profile page and forgiving a fine on the users page. Older dialogs keep their own components.
@@ -106,7 +114,17 @@ cycles. Only `app/` exists at first; create the others when something belongs th
   column widths (saved at `/api/admin/users/columns`), the open user's fines and the thunks for
   every `/api/admin/users` call. The action and fines dialogs keep their local state in hooks under
   `pages/users/hooks/` and reload the list after a change.
-- `features/navigation/` holds the header (menu button, `Library` title, theme toggle), the nav
+- `features/notifications/` holds the notification bell in the header, just before the theme
+  toggle. `use-notification-stream.ts` opens an `EventSource` on `/api/notifications/stream`,
+  refetches the list and unread count every time the stream (re)connects, and adds each live
+  `notification` event to the top of the list. The bell shows the unread count as a red badge and
+  opens a panel with Mark all as read, Delete all (after a confirm step), per-row mark as read and
+  delete buttons, and infinite scroll with a loading bar at the bottom. Unread rows are bold.
+  Clicking a "copy ready" notification opens `/borrow` filtered to that ISBN with the row flashing;
+  clicking a removal notification opens `/profile`. The data and thunks live in the
+  `notifications` slice (`store/notification-slice.ts`), which resets on login, logout and
+  account deletion.
+- `features/navigation/` holds the header (menu button, `Library` title, notification bell, theme toggle), the nav
   drawer and `pages.ts`, the list of pages with their labels, icons and admin flag.
   `app/document-title.tsx` sets the tab title to `Library - <Page>` from that list.
 - The theme lives in `app/theme.ts`. Light mode is `#000040` on `#FFDACF`, dark mode is the inverse.
@@ -137,6 +155,9 @@ sends the page, size, sort and filter values.
 - Column widths are percentages summing to 100. Dragging the divider on the right of a header
   (`use-column-resize.ts`) moves width between that column and the next, never below 5% each, and
   reports the final widths once on release so the page can save them.
+- The optional `flashKey` prop marks the row with that key (`data-flash="true"`), scrolls it into
+  view and flashes its background three times; `onFlashEnd` fires when the animation ends so the
+  page can clear the key.
 - `table-toolbar.tsx` (filter button with an active filter count, page size select and an optional
   slot for extra buttons), `table-pagination.tsx` and `filter-dialog.tsx` (one exact-match dropdown
   per field) complete a page. `buildQuery` (`build-query.ts`) writes the list query string in a
@@ -161,13 +182,17 @@ Test files are typed by `tsconfig.spec.json`, never included in `tsconfig.app.js
 - Page specs render the page inside `withStore` from `test/with-store.tsx` (a fresh store with a
   preloaded user; sample users live in `test/users.ts`) and a `MemoryRouter`, and stub the backend
   with `test/mock-fetch.ts`, which answers `fetch` calls by `"METHOD /path"`.
+- jsdom has no `EventSource`, so `test/setup.ts` installs `test/mock-event-source.ts` before every
+  test. `MockEventSource.latest()` returns the last opened stream, and `emit(type, data)` fires an
+  event on it (wrap it in `act`).
 
 ## Dev Server And API
 
 `pnpm nx dev frontend` serves on `http://localhost:4210` and proxies `/api` to the backend at
 `http://localhost:8080`. Override the target with `VITE_API_URL` in `frontend/.env.local`
 (gitignored, see `.env.example`). In production `frontend/nginx.conf` plays the same role: it
-serves `dist/` with an SPA fallback and proxies `/api/` to the `backend` container. Both keep the
+serves `dist/` with an SPA fallback and proxies `/api/` to the `backend` container, with a
+separate unbuffered block for the long-lived `/api/notifications/stream`. Both keep the
 app same-origin, so there is no CORS configuration anywhere.
 
 `frontend/Dockerfile` installs with the pinned pnpm, runs `pnpm nx build frontend` and copies

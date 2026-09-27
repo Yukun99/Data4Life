@@ -2,11 +2,15 @@ package com.yukunxu.data4life.loan;
 
 import com.yukunxu.data4life.catalogue.Book;
 import com.yukunxu.data4life.catalogue.BookRepository;
+import com.yukunxu.data4life.notification.NotificationService;
+import com.yukunxu.data4life.notification.NotificationType;
 import com.yukunxu.data4life.user.User;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -33,10 +37,13 @@ public class LoanService {
 
     private final LoanRepository repository;
     private final BookRepository bookRepository;
+    private final NotificationService notificationService;
 
-    public LoanService(LoanRepository repository, BookRepository bookRepository) {
+    public LoanService(LoanRepository repository, BookRepository bookRepository,
+            NotificationService notificationService) {
         this.repository = repository;
         this.bookRepository = bookRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -100,22 +107,80 @@ public class LoanService {
         Instant now = Instant.now();
         for (Loan loan : repository.lockExpiredReservations(now)) {
             loan.setReleasedAt(now);
-            Book book = bookRepository.lockByIsbn(loan.getBook().getIsbn()).orElseThrow();
-            book.setStock(Math.min(book.getAmount(), book.getStock() + 1));
+            putBack(loan.getBook().getIsbn(), now);
         }
+    }
+
+    /** Returns one copy of the book to stock, then hands free copies to its queue. */
+    @Transactional
+    public void putBack(String isbn, Instant now) {
+        Book book = bookRepository.lockByIsbn(isbn).orElseThrow();
+        book.setStock(Math.min(book.getAmount(), book.getStock() + 1));
+        serveQueue(book, now);
+    }
+
+    /** Gives free copies to queued users in order, removing blocked ones. Expects the book row locked. */
+    public void serveQueue(Book book, Instant now) {
+        Iterator<Loan> queue = repository.findQueued(List.of(book.getIsbn())).iterator();
+        while (book.getStock() > 0 && queue.hasNext()) {
+            Loan loan = queue.next();
+            String block = fineBlock(loan.getUser(), now);
+            if (block != null) {
+                loan.setRemovedAt(now);
+                loan.setReleasedAt(now);
+                notificationService.send(loan, block.equals(UNPAID_BLOCK)
+                        ? NotificationType.REMOVED_UNPAID : NotificationType.REMOVED_OVERDUE);
+            } else {
+                loan.setReservedUntil(now.plus(Duration.ofDays(RESERVE_DAYS)));
+                book.setStock(book.getStock() - 1);
+                notificationService.send(loan, NotificationType.AVAILABLE);
+            }
+        }
+    }
+
+    /** Queued rows per ISBN, each list in queue order. */
+    public Map<String, List<Loan>> queues(Collection<String> isbns) {
+        if (isbns.isEmpty()) {
+            return Map.of();
+        }
+        return repository.findQueued(isbns).stream()
+                .collect(Collectors.groupingBy(loan -> loan.getBook().getIsbn()));
+    }
+
+    /** One-based place of the user in the queue, or null when they are not in it. */
+    public static Integer queuePosition(List<Loan> queue, Long userId) {
+        for (int i = 0; i < queue.size(); i++) {
+            if (queue.get(i).getUser().getId().equals(userId)) {
+                return i + 1;
+            }
+        }
+        return null;
     }
 
     /** Why the user may not borrow or reserve right now, or null when they may. Expects released reservations. */
     public String borrowBlock(User user, Instant now) {
         List<Loan> loans = repository.findByUserNewestFirst(user);
+        String block = fineBlock(loans, now);
+        if (block != null) {
+            return block;
+        }
+        if (loans.stream().filter(LoanService::isHolding).count() >= MAX_HOLDINGS) {
+            return FULL_BLOCK;
+        }
+        return null;
+    }
+
+    /** Unpaid fines or an overdue book, or null when neither applies. */
+    public String fineBlock(User user, Instant now) {
+        return fineBlock(repository.findByUserNewestFirst(user), now);
+    }
+
+    private static String fineBlock(List<Loan> loans, Instant now) {
         if (loans.stream().anyMatch(loan -> status(loan, now) == LoanStatus.UNPAID)) {
             return UNPAID_BLOCK;
         }
         if (loans.stream().anyMatch(loan -> status(loan, now) == LoanStatus.OVERDUE)) {
             return OVERDUE_BLOCK;
-        }
-        if (loans.stream().filter(LoanService::isHolding).count() >= MAX_HOLDINGS) {
-            return FULL_BLOCK;
         }
         return null;
     }
@@ -127,8 +192,16 @@ public class LoanService {
 
     public static LoanStatus status(Loan loan, Instant now) {
         if (loan.getBorrowedAt() == null) {
-            boolean expired = loan.getReleasedAt() != null || now.isAfter(loan.getReservedUntil());
-            return expired ? LoanStatus.EXPIRED : LoanStatus.RESERVED;
+            if (loan.getRemovedAt() != null) {
+                return LoanStatus.REMOVED;
+            }
+            if (loan.getReleasedAt() != null) {
+                return LoanStatus.EXPIRED;
+            }
+            if (loan.getReservedUntil() == null) {
+                return LoanStatus.QUEUED;
+            }
+            return now.isAfter(loan.getReservedUntil()) ? LoanStatus.EXPIRED : LoanStatus.RESERVED;
         }
         if (loan.getReturnedAt() == null) {
             return now.isAfter(loan.getDueAt()) ? LoanStatus.OVERDUE : LoanStatus.BORROWED;

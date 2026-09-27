@@ -1,5 +1,6 @@
 import NavDrawer from '@/features/navigation/nav-drawer';
 import ThemeToggle from '@/features/navigation/theme-toggle';
+import NotificationBell from '@/features/notifications/notification-bell';
 import MenuIcon from '@mui/icons-material/Menu';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -36,6 +37,7 @@ const Header = () => {
       <Typography variant="h6" component="span" sx={{ flex: 1, textAlign: 'center' }}>
         Library
       </Typography>
+      <NotificationBell />
       <ThemeToggle />
       <NavDrawer open={open} onClose={() => setOpen(false)} />
     </Box>

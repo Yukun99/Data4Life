@@ -1,10 +1,17 @@
 import DataTable from '@/common/components/data-table/data-table';
 import { ColumnSpec } from '@/common/components/data-table/types';
+import { queueText } from '@/common/utils/format';
 import { BorrowAction } from '@/pages/borrow/hooks/use-borrow-action';
 import useBorrowColumns from '@/pages/borrow/hooks/use-borrow-columns';
-import { BorrowBook, BorrowColumnKey, BorrowSort, BorrowSortKey } from '@/store/borrow-slice';
+import {
+  BorrowBook,
+  BorrowColumnKey,
+  BorrowSort,
+  BorrowSortKey,
+  Holding,
+} from '@/store/borrow-slice';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
+import Chip, { ChipProps } from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 
@@ -18,6 +25,8 @@ type BorrowTableProps = {
   onToggleSort: (key: BorrowSortKey) => void;
   onSwitchSort: (key: BorrowSortKey) => void;
   onAction: (book: BorrowBook, action: BorrowAction) => void;
+  flashIsbn: string | null;
+  onFlashEnd: () => void;
 };
 
 type ActionButtonProps = {
@@ -43,6 +52,15 @@ const ActionButton = ({ book, action, reason, onAction }: ActionButtonProps) => 
   </Tooltip>
 );
 
+const CHIP: Record<Holding, { label: string; color: ChipProps['color'] }> = {
+  BORROWED: { label: 'Borrowed', color: 'primary' },
+  RESERVED: { label: 'Reserved', color: 'secondary' },
+  QUEUED: { label: 'Queued', color: 'info' },
+};
+
+const chipLabel = (holding: Holding, position: number | null) =>
+  holding === 'QUEUED' && position !== null ? queueText(position) : CHIP[holding].label;
+
 const BorrowTable = ({
   books,
   sort,
@@ -53,34 +71,36 @@ const BorrowTable = ({
   onToggleSort,
   onSwitchSort,
   onAction,
+  flashIsbn,
+  onFlashEnd,
 }: BorrowTableProps) => {
   const { widths, onWidthsChange, onWidthsCommit } = useBorrowColumns();
 
   const actions = (book: BorrowBook) => {
     const chip = book.holding && (
       <Chip
-        label={book.holding === 'BORROWED' ? 'Borrowed' : 'Reserved'}
-        color={book.holding === 'BORROWED' ? 'primary' : 'secondary'}
+        label={chipLabel(book.holding, book.queuePosition)}
+        color={CHIP[book.holding].color}
         size="small"
         data-testid={`borrow-holding-${book.isbn}`}
       />
     );
-    if (book.holding === 'BORROWED') {
+    if (book.holding === 'BORROWED' || book.holding === 'QUEUED') {
       return chip;
     }
     const reserved = book.holding === 'RESERVED';
-    const reason = block ?? (book.stock === 0 ? 'Out of stock' : '');
+    const stockReason = book.stock === 0 ? 'Out of stock' : '';
     return (
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         {chip}
         <ActionButton
           book={book}
           action="borrow"
-          reason={reserved ? (convertBlock ?? '') : reason}
+          reason={reserved ? (convertBlock ?? '') : (block ?? stockReason)}
           onAction={onAction}
         />
         {!reserved && (
-          <ActionButton book={book} action="reserve" reason={reason} onAction={onAction} />
+          <ActionButton book={book} action="reserve" reason={block ?? ''} onAction={onAction} />
         )}
       </Stack>
     );
@@ -128,6 +148,8 @@ const BorrowTable = ({
       error={error}
       emptyText="No books found"
       testIdPrefix="borrow"
+      flashKey={flashIsbn}
+      onFlashEnd={onFlashEnd}
     />
   );
 };

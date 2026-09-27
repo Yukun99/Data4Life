@@ -11,6 +11,13 @@ type UseBorrowActionParams = {
 };
 
 const dialogText = ({ book, action }: Target) => {
+  if (action === 'reserve' && book.stock === 0) {
+    return {
+      title: `Join the queue for ${book.title}?`,
+      body: `Pay $5.00 to join the queue. You will be number ${book.queueLength + 1}. The 7 days start when a copy is ready.`,
+      confirmLabel: 'Pay and join',
+    };
+  }
   if (action === 'reserve') {
     return {
       title: `Reserve ${book.title}?`,

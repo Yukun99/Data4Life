@@ -12,6 +12,7 @@ import com.yukunxu.data4life.user.User;
 import com.yukunxu.data4life.user.UserService;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -49,10 +50,12 @@ public class BorrowService {
         Map<String, LoanStatus> holdings = loanRepository.findByUserAndReturnedAtIsNullAndReleasedAtIsNull(user)
                 .stream()
                 .collect(Collectors.toMap(loan -> loan.getBook().getIsbn(), BorrowService::holding, (a, b) -> a));
+        Map<String, List<Loan>> queues = loanService.queues(result.getContent().stream().map(Book::getIsbn).toList());
         String block = loanService.borrowBlock(user, Instant.now());
         return new BorrowBooksResponse(
                 result.getContent().stream()
-                        .map(book -> BorrowBookResponse.from(book, holdings.get(book.getIsbn())))
+                        .map(book -> response(user, book, holdings.get(book.getIsbn()),
+                                queues.getOrDefault(book.getIsbn(), List.of())))
                         .toList(),
                 result.getNumber(), result.getTotalPages(), result.getTotalElements(), bookService.filterOptions(),
                 block, convertBlock(block));
@@ -65,6 +68,9 @@ public class BorrowService {
         Optional<Loan> held = holding(user, book);
         if (held.isPresent() && held.get().getBorrowedAt() != null) {
             throw conflict("You already have this book on loan");
+        }
+        if (held.isPresent() && held.get().getReservedUntil() == null) {
+            throw conflict("Your reservation is still in the queue");
         }
         Instant now = Instant.now();
         String block = loanService.borrowBlock(user, now);
@@ -79,26 +85,34 @@ public class BorrowService {
             takeCopy(book);
             loanRepository.save(new Loan(user, book, now, dueAt));
         }
-        return BorrowBookResponse.from(book, LoanStatus.BORROWED);
+        return response(user, book, LoanStatus.BORROWED);
     }
 
+    /** Reserves a copy for a week, or joins the book's queue when it is out of stock. */
     @Transactional
     public BorrowBookResponse reserve(User user, String isbn) {
         loanService.releaseExpired();
         Book book = lock(isbn);
         Optional<Loan> held = holding(user, book);
         if (held.isPresent()) {
-            throw conflict(held.get().getBorrowedAt() != null
-                    ? "You already have this book on loan" : "You already reserved this book");
+            throw conflict(switch (holding(held.get())) {
+                case BORROWED -> "You already have this book on loan";
+                case QUEUED -> "You are already in the queue for this book";
+                default -> "You already reserved this book";
+            });
         }
         Instant now = Instant.now();
         String block = loanService.borrowBlock(user, now);
         if (block != null) {
             throw conflict(block);
         }
+        if (book.getStock() <= 0) {
+            loanRepository.save(Loan.queued(user, book, now));
+            return response(user, book, LoanStatus.QUEUED);
+        }
         takeCopy(book);
         loanRepository.save(Loan.reserved(user, book, now, now.plus(Duration.ofDays(LoanService.RESERVE_DAYS))));
-        return BorrowBookResponse.from(book, LoanStatus.RESERVED);
+        return response(user, book, LoanStatus.RESERVED);
     }
 
     @Transactional(readOnly = true)
@@ -139,8 +153,20 @@ public class BorrowService {
         return LoanService.FULL_BLOCK.equals(block) ? null : block;
     }
 
+    private BorrowBookResponse response(User user, Book book, LoanStatus holding) {
+        return response(user, book, holding, loanService.queues(List.of(book.getIsbn()))
+                .getOrDefault(book.getIsbn(), List.of()));
+    }
+
+    private static BorrowBookResponse response(User user, Book book, LoanStatus holding, List<Loan> queue) {
+        return BorrowBookResponse.from(book, holding, LoanService.queuePosition(queue, user.getId()), queue.size());
+    }
+
     private static LoanStatus holding(Loan loan) {
-        return loan.getBorrowedAt() != null ? LoanStatus.BORROWED : LoanStatus.RESERVED;
+        if (loan.getBorrowedAt() != null) {
+            return LoanStatus.BORROWED;
+        }
+        return loan.getReservedUntil() == null ? LoanStatus.QUEUED : LoanStatus.RESERVED;
     }
 
     private static ResponseStatusException conflict(String message) {

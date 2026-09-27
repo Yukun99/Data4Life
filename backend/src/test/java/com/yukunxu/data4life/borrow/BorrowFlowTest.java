@@ -86,6 +86,8 @@ class BorrowFlowTest {
                 .andExpect(jsonPath("$.books[0].stock").value(4))
                 .andExpect(jsonPath("$.books[0].amount").doesNotExist())
                 .andExpect(jsonPath("$.books[0].holding").value("BORROWED"))
+                .andExpect(jsonPath("$.books[0].queuePosition").isEmpty())
+                .andExpect(jsonPath("$.books[0].queueLength").value(0))
                 .andExpect(jsonPath("$.books[1].isbn").value(CHRISTIE))
                 .andExpect(jsonPath("$.books[1].stock").value(4))
                 .andExpect(jsonPath("$.books[1].holding").value("RESERVED"))
@@ -127,12 +129,67 @@ class BorrowFlowTest {
 
         borrow(KOKORO).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Out of stock"));
+        reserve(KOKORO).andExpect(status().isOk())
+                .andExpect(jsonPath("$.stock").value(0))
+                .andExpect(jsonPath("$.holding").value("QUEUED"))
+                .andExpect(jsonPath("$.queuePosition").value(1))
+                .andExpect(jsonPath("$.queueLength").value(1));
+        borrow(KOKORO).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Your reservation is still in the queue"));
         reserve(KOKORO).andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Out of stock"));
+                .andExpect(jsonPath("$.message").value("You are already in the queue for this book"));
         borrow("missing").andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Book not found"));
         reserve("missing").andExpect(status().isNotFound());
-        assertThat(loanRepository.existsByUser(user)).isFalse();
+
+        Loan queued = onlyLoan();
+        assertThat(queued.getReservedAt()).isNotNull();
+        assertThat(queued.getReservedUntil()).isNull();
+        assertThat(bookRepository.findById(KOKORO).orElseThrow().getStock()).isZero();
+        mockMvc.perform(get("/api/loans").session(session))
+                .andExpect(jsonPath("$.loans[0].status").value("QUEUED"))
+                .andExpect(jsonPath("$.loans[0].fee").value(5.0))
+                .andExpect(jsonPath("$.loans[0].reservedUntil").isEmpty());
+    }
+
+    @Test
+    void queuePositionsAndLengths() throws Exception {
+        bookRepository.findById(KOKORO).orElseThrow().setStock(0);
+        MockHttpSession bob = signUpAndLogin("bob@example.com");
+        mockMvc.perform(post("/api/borrow/{isbn}/reserve", KOKORO).session(bob))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.queuePosition").value(1));
+
+        reserve(KOKORO).andExpect(status().isOk())
+                .andExpect(jsonPath("$.queuePosition").value(2))
+                .andExpect(jsonPath("$.queueLength").value(2));
+
+        mockMvc.perform(get("/api/borrow").param("isbn", KOKORO).session(session))
+                .andExpect(jsonPath("$.books[0].holding").value("QUEUED"))
+                .andExpect(jsonPath("$.books[0].queuePosition").value(2))
+                .andExpect(jsonPath("$.books[0].queueLength").value(2));
+        mockMvc.perform(get("/api/borrow").param("isbn", KOKORO).session(bob))
+                .andExpect(jsonPath("$.books[0].queuePosition").value(1))
+                .andExpect(jsonPath("$.books[0].queueLength").value(2));
+        mockMvc.perform(get("/api/borrow").param("isbn", DUNE).session(session))
+                .andExpect(jsonPath("$.books[0].holding").isEmpty())
+                .andExpect(jsonPath("$.books[0].queuePosition").isEmpty())
+                .andExpect(jsonPath("$.books[0].queueLength").value(0));
+    }
+
+    @Test
+    void queuedRowsCountTowardTheCap() throws Exception {
+        bookRepository.findById(KOKORO).orElseThrow().setStock(0);
+        reserve(KOKORO).andExpect(status().isOk())
+                .andExpect(jsonPath("$.holding").value("QUEUED"));
+        for (String isbn : OTHERS) {
+            borrow(isbn).andExpect(status().isOk());
+        }
+
+        mockMvc.perform(get("/api/borrow").session(session))
+                .andExpect(jsonPath("$.block").value("You already hold 8 books"));
+        reserve(DUNE).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("You already hold 8 books"));
     }
 
     @Test

@@ -53,6 +53,9 @@ public class Loan {
     @Column(name = "released_at")
     private Instant releasedAt;
 
+    @Column(name = "removed_at")
+    private Instant removedAt;
+
     protected Loan() {
     }
 
@@ -67,6 +70,13 @@ public class Loan {
         Loan loan = new Loan(user, book, null, null);
         loan.reservedAt = reservedAt;
         loan.reservedUntil = reservedUntil;
+        return loan;
+    }
+
+    /** A reservation waiting in the queue: no copy yet, so no end date. */
+    public static Loan queued(User user, Book book, Instant reservedAt) {
+        Loan loan = new Loan(user, book, null, null);
+        loan.reservedAt = reservedAt;
         return loan;
     }
 
@@ -140,5 +150,13 @@ public class Loan {
 
     public void setReleasedAt(Instant releasedAt) {
         this.releasedAt = releasedAt;
+    }
+
+    public Instant getRemovedAt() {
+        return removedAt;
+    }
+
+    public void setRemovedAt(Instant removedAt) {
+        this.removedAt = removedAt;
     }
 }

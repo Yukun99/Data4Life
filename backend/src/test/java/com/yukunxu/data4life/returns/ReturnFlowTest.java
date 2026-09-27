@@ -1,6 +1,7 @@
 package com.yukunxu.data4life.returns;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -13,6 +14,9 @@ import com.yukunxu.data4life.catalogue.BookRepository;
 import com.yukunxu.data4life.loan.Loan;
 import com.yukunxu.data4life.loan.LoanRepository;
 import com.yukunxu.data4life.loan.LoanService;
+import com.yukunxu.data4life.loan.LoanStatus;
+import com.yukunxu.data4life.notification.NotificationCreated;
+import com.yukunxu.data4life.notification.NotificationType;
 import com.yukunxu.data4life.user.User;
 import com.yukunxu.data4life.user.UserRepository;
 import java.time.Duration;
@@ -25,6 +29,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -34,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
+@RecordApplicationEvents
 class ReturnFlowTest {
 
     private static final String SAPIENS = "9780062316097";
@@ -58,6 +65,9 @@ class ReturnFlowTest {
 
     @Autowired
     private LoanRepository loanRepository;
+
+    @Autowired
+    private ApplicationEvents events;
 
     private MockHttpSession session;
     private User user;
@@ -161,6 +171,132 @@ class ReturnFlowTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("This is not a reservation"));
         unreserve(999999L).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void returnGivesTheCopyToTheFirstQueuedUser() throws Exception {
+        Loan loan = loan(user, DUNE, now.minus(days(2)));
+        book(DUNE).setStock(0);
+        MockHttpSession bobSession = signUpAndLogin("bob@example.com");
+        User bob = userRepository.findByEmail("bob@example.com").orElseThrow();
+        User cal = signUp("cal@example.com");
+        Loan first = queue(bob, DUNE, now.minus(Duration.ofHours(2)));
+        Loan second = queue(cal, DUNE, now.minus(Duration.ofHours(1)));
+
+        returnLoan(loan.getId()).andExpect(status().isOk());
+
+        assertThat(book(DUNE).getStock()).isZero();
+        assertThat(first.getReservedUntil()).isAfter(now.plus(days(LoanService.RESERVE_DAYS - 1)));
+        assertThat(second.getReservedUntil()).isNull();
+        assertThat(events.stream(NotificationCreated.class)).singleElement().satisfies(event -> {
+            assertThat(event.userId()).isEqualTo(bob.getId());
+            assertThat(event.notification().type()).isEqualTo(NotificationType.AVAILABLE);
+            assertThat(event.notification().isbn()).isEqualTo(DUNE);
+            assertThat(event.notification().title()).isEqualTo("Dune");
+        });
+        mockMvc.perform(get("/api/notifications").session(bobSession))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].type").value("AVAILABLE"))
+                .andExpect(jsonPath("$.items[0].isbn").value(DUNE))
+                .andExpect(jsonPath("$.items[0].read").value(false));
+        mockMvc.perform(get("/api/return").session(bobSession))
+                .andExpect(jsonPath("$.loans[0].status").value("RESERVED"))
+                .andExpect(jsonPath("$.loans[0].queuePosition").isEmpty());
+    }
+
+    @Test
+    void blockedQueuedUserIsRemovedAndTheNextServed() throws Exception {
+        Loan loan = loan(user, DUNE, now.minus(days(2)));
+        book(DUNE).setStock(0);
+        User bob = signUp("bob@example.com");
+        User cal = signUp("cal@example.com");
+        loan(bob, KOKORO, now.minus(days(40))).setReturnedAt(now.minus(days(20)));
+        Loan first = queue(bob, DUNE, now.minus(Duration.ofHours(2)));
+        Loan second = queue(cal, DUNE, now.minus(Duration.ofHours(1)));
+
+        returnLoan(loan.getId()).andExpect(status().isOk());
+
+        assertThat(book(DUNE).getStock()).isZero();
+        assertThat(first.getRemovedAt()).isNotNull();
+        assertThat(first.getReleasedAt()).isNotNull();
+        assertThat(LoanService.status(first, Instant.now())).isEqualTo(LoanStatus.REMOVED);
+        assertThat(second.getReservedUntil()).isNotNull();
+        assertThat(events.stream(NotificationCreated.class))
+                .extracting(NotificationCreated::userId, event -> event.notification().type())
+                .containsExactly(tuple(bob.getId(), NotificationType.REMOVED_UNPAID),
+                        tuple(cal.getId(), NotificationType.AVAILABLE));
+    }
+
+    @Test
+    void copyGoesBackToStockWhenNobodyQueuedIsEligible() throws Exception {
+        Loan loan = loan(user, DUNE, now.minus(days(2)));
+        book(DUNE).setStock(0);
+        User bob = signUp("bob@example.com");
+        loan(bob, KOKORO, now.minus(days(20)));
+        Loan queued = queue(bob, DUNE, now.minus(Duration.ofHours(1)));
+
+        returnLoan(loan.getId()).andExpect(status().isOk());
+
+        assertThat(book(DUNE).getStock()).isEqualTo(1);
+        assertThat(LoanService.status(queued, Instant.now())).isEqualTo(LoanStatus.REMOVED);
+        assertThat(events.stream(NotificationCreated.class)).singleElement()
+                .satisfies(event -> assertThat(event.notification().type())
+                        .isEqualTo(NotificationType.REMOVED_OVERDUE));
+    }
+
+    @Test
+    void leavingTheQueueKeepsStock() throws Exception {
+        book(DUNE).setStock(0);
+        Loan queued = queue(user, DUNE, now);
+
+        unreserve(queued.getId())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXPIRED"))
+                .andExpect(jsonPath("$.reservedUntil").isEmpty());
+        assertThat(book(DUNE).getStock()).isZero();
+        assertThat(queued.getReleasedAt()).isNotNull();
+        assertThat(queued.getRemovedAt()).isNull();
+        list().andExpect(jsonPath("$.total").value(0));
+        unreserve(queued.getId())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("This reservation has already ended"));
+    }
+
+    @Test
+    void listShowsQueuePositionAndSortsQueuedRowsLast() throws Exception {
+        book(DUNE).setStock(0);
+        queue(signUp("bob@example.com"), DUNE, now.minus(Duration.ofHours(1)));
+        Loan queued = queue(user, DUNE, now);
+        Loan open = loan(user, KOKORO, now.minus(days(2)));
+
+        list()
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.loans[0].id").value(open.getId()))
+                .andExpect(jsonPath("$.loans[0].queuePosition").isEmpty())
+                .andExpect(jsonPath("$.loans[1].id").value(queued.getId()))
+                .andExpect(jsonPath("$.loans[1].status").value("QUEUED"))
+                .andExpect(jsonPath("$.loans[1].queuePosition").value(2))
+                .andExpect(jsonPath("$.loans[1].dueAt").isEmpty())
+                .andExpect(jsonPath("$.loans[1].reservedUntil").isEmpty());
+        list("dir", "desc")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2));
+    }
+
+    @Test
+    void queuePositionOnlyShowsOnTheQueuedRow() throws Exception {
+        Loan late = loan(user, DUNE, now.minus(days(20)));
+        late.setReturnedAt(now.minus(days(1)));
+        book(DUNE).setStock(0);
+        Loan queued = queue(user, DUNE, now);
+
+        list()
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.loans[0].id").value(late.getId()))
+                .andExpect(jsonPath("$.loans[0].status").value("UNPAID"))
+                .andExpect(jsonPath("$.loans[0].queuePosition").isEmpty())
+                .andExpect(jsonPath("$.loans[1].id").value(queued.getId()))
+                .andExpect(jsonPath("$.loans[1].queuePosition").value(1));
     }
 
     @Test
@@ -319,6 +455,14 @@ class ReturnFlowTest {
     private Loan loan(User owner, String isbn, Instant borrowedAt) {
         return loanRepository.save(new Loan(owner, book(isbn), borrowedAt,
                 borrowedAt.plus(days(LoanService.LOAN_DAYS))));
+    }
+
+    private Loan queue(User owner, String isbn, Instant reservedAt) {
+        return loanRepository.save(Loan.queued(owner, book(isbn), reservedAt));
+    }
+
+    private User signUp(String email) {
+        return userRepository.save(new User(email, "Someone", "hash"));
     }
 
     private Book book(String isbn) {

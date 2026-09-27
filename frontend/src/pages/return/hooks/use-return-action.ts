@@ -45,6 +45,13 @@ const dialogText = ({ loan, action, totalUnpaid }: DialogTextParams) => {
       confirmLabel: 'Pay',
     };
   }
+  if (action === 'unreserve' && loan.status === 'QUEUED') {
+    return {
+      title: `Leave the queue for ${loan.title}?`,
+      body: 'The $5.00 fee is not refunded.',
+      confirmLabel: 'Leave queue',
+    };
+  }
   if (action === 'unreserve') {
     return {
       title: `Cancel reservation for ${loan.title}?`,

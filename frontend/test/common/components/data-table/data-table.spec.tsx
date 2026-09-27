@@ -36,14 +36,22 @@ type RenderParams = {
   data?: Row[];
   loading?: boolean;
   error?: string;
+  flashKey?: number | null;
 };
 
-const renderTable = ({ sort = null, data = rows, loading = false, error = '' }: RenderParams = {}) => {
+const renderTable = ({
+  sort = null,
+  data = rows,
+  loading = false,
+  error = '',
+  flashKey = null,
+}: RenderParams = {}) => {
   const props = {
     onToggleSort: vi.fn(),
     onSwitchSort: vi.fn(),
     onWidthsChange: vi.fn(),
     onWidthsCommit: vi.fn(),
+    onFlashEnd: vi.fn(),
   };
   render(
     <DataTable
@@ -57,6 +65,7 @@ const renderTable = ({ sort = null, data = rows, loading = false, error = '' }: 
       error={error}
       emptyText="Nothing here"
       testIdPrefix="people"
+      flashKey={flashKey}
       {...props}
     />,
   );
@@ -148,5 +157,29 @@ describe('DataTable', () => {
     expect(props.onWidthsChange).toHaveBeenLastCalledWith({ person: 60, id: 20, actions: 20 });
     expect(props.onWidthsCommit).toHaveBeenCalledTimes(1);
     expect(props.onWidthsCommit).toHaveBeenCalledWith({ person: 60, id: 20, actions: 20 });
+  });
+
+  it('flashes and scrolls to the matching row and reports the end of the animation', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const props = renderTable({ flashKey: 2 });
+
+    const row = screen.getByTestId('row-2');
+    expect(row).toHaveAttribute('data-flash', 'true');
+    expect(screen.getByTestId('row-1')).not.toHaveAttribute('data-flash');
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+
+    fireEvent.animationEnd(screen.getByTestId('row-1'));
+    expect(props.onFlashEnd).not.toHaveBeenCalled();
+    fireEvent.animationEnd(row);
+    expect(props.onFlashEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('flashes no row without a flash key', () => {
+    renderTable();
+
+    expect(screen.getByTestId('row-1')).not.toHaveAttribute('data-flash');
+    expect(screen.getByTestId('row-2')).not.toHaveAttribute('data-flash');
   });
 });

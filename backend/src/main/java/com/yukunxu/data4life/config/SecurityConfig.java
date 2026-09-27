@@ -1,5 +1,6 @@
 package com.yukunxu.data4life.config;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -28,6 +29,7 @@ public class SecurityConfig {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/users", "/api/auth/login").permitAll()
                         .requestMatchers("/actuator/health", "/api/ping", "/error").permitAll()
                         .requestMatchers("/api/books/**", "/api/catalogue/**", "/api/admin/**").hasRole("ADMIN")

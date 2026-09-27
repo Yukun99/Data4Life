@@ -1,6 +1,7 @@
 import BorrowPage from '@/pages/borrow/borrow-page';
-import { BorrowBook } from '@/store/borrow-slice';
-import { render, screen, waitFor } from '@testing-library/react';
+import { BorrowBook, showBook } from '@/store/borrow-slice';
+import { received } from '@/store/notification-slice';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import mockFetch from '../../mock-fetch';
@@ -20,6 +21,8 @@ const dune: BorrowBook = {
   language: english,
   stock: 2,
   holding: null,
+  queuePosition: null,
+  queueLength: 0,
 };
 
 const kokoro: BorrowBook = {
@@ -30,6 +33,8 @@ const kokoro: BorrowBook = {
   language: japanese,
   stock: 1,
   holding: 'BORROWED',
+  queuePosition: null,
+  queueLength: 0,
 };
 
 const emma: BorrowBook = {
@@ -40,6 +45,8 @@ const emma: BorrowBook = {
   language: english,
   stock: 0,
   holding: 'RESERVED',
+  queuePosition: null,
+  queueLength: 0,
 };
 
 const ulysses: BorrowBook = {
@@ -50,6 +57,20 @@ const ulysses: BorrowBook = {
   language: english,
   stock: 0,
   holding: null,
+  queuePosition: null,
+  queueLength: 2,
+};
+
+const hamlet: BorrowBook = {
+  isbn: '555',
+  title: 'Hamlet',
+  author: 'William Shakespeare',
+  genre: literary,
+  language: english,
+  stock: 0,
+  holding: 'QUEUED',
+  queuePosition: 2,
+  queueLength: 3,
 };
 
 const filters = {
@@ -74,7 +95,7 @@ const list = (
   [`GET /api/borrow?${query}`]: {
     status: 200,
     body: {
-      books: [dune, kokoro, emma, ulysses],
+      books: [dune, kokoro, emma, ulysses, hamlet],
       page,
       totalPages: 3,
       total: 30,
@@ -131,14 +152,95 @@ describe('BorrowPage', () => {
     expect(screen.queryByTestId('borrow-reserve-333')).not.toBeInTheDocument();
   });
 
-  it('disables both buttons when a book is out of stock', async () => {
+  it('disables only Borrow when a book is out of stock', async () => {
     renderPage();
 
     expect(await screen.findByTestId('borrow-borrow-444')).toBeDisabled();
-    expect(screen.getByTestId('borrow-reserve-444')).toBeDisabled();
+    expect(screen.getByTestId('borrow-reserve-444')).toBeEnabled();
 
     await userEvent.hover(screen.getByTestId('borrow-borrow-444').parentElement as HTMLElement);
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Out of stock');
+  });
+
+  it('shows the queue position on a queued row with no buttons', async () => {
+    renderPage();
+
+    expect(await screen.findByTestId('borrow-holding-555')).toHaveTextContent(
+      'Number 2 in queue',
+    );
+    expect(screen.queryByTestId('borrow-borrow-555')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('borrow-reserve-555')).not.toBeInTheDocument();
+  });
+
+  it('joins the queue for an out of stock book after confirming', async () => {
+    const { fetchMock } = renderPage({
+      'POST /api/borrow/444/reserve': {
+        status: 200,
+        body: { ...ulysses, holding: 'QUEUED', queuePosition: 3, queueLength: 3 },
+      },
+    });
+
+    await userEvent.click(await screen.findByTestId('borrow-reserve-444'));
+    const dialog = screen.getByTestId('borrow-confirm-dialog');
+    expect(dialog).toHaveTextContent('Join the queue for Ulysses?');
+    expect(dialog).toHaveTextContent(
+      'Pay $5.00 to join the queue. You will be number 3. The 7 days start when a copy is ready.',
+    );
+    expect(screen.getByTestId('borrow-confirm-confirm')).toHaveTextContent('Pay and join');
+
+    await userEvent.click(screen.getByTestId('borrow-confirm-confirm'));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('borrow-confirm-dialog')).not.toBeInTheDocument(),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/borrow/444/reserve',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    await called(fetchMock, FIRST, 2);
+  });
+
+  it('filters to a shown book and flashes its row until the animation ends', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const { fetchMock, store } = renderPage(list('page=0&size=10&isbn=111'));
+    await screen.findByTestId('borrow-row-111');
+
+    act(() => {
+      store.dispatch(showBook('111'));
+    });
+
+    await called(fetchMock, '/api/borrow?page=0&size=10&isbn=111');
+    const row = screen.getByTestId('borrow-row-111');
+    expect(row).toHaveAttribute('data-flash', 'true');
+    expect(screen.getByTestId('borrow-row-222')).not.toHaveAttribute('data-flash');
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+
+    fireEvent.animationEnd(row);
+
+    await waitFor(() => expect(row).not.toHaveAttribute('data-flash'));
+    expect(store.getState().borrow.flashIsbn).toBeNull();
+  });
+
+  it('reloads the list when a live notification arrives', async () => {
+    const { fetchMock, store } = renderPage();
+    await screen.findByTestId('borrow-row-111');
+    expect(calls(fetchMock, FIRST)).toBe(1);
+
+    act(() => {
+      store.dispatch(
+        received({
+          id: 9,
+          type: 'AVAILABLE',
+          isbn: '555',
+          title: 'Hamlet',
+          createdAt: '2026-09-27T00:00:00Z',
+          read: false,
+        }),
+      );
+    });
+
+    await called(fetchMock, FIRST, 2);
   });
 
   it('shows the block reason and disables every button', async () => {

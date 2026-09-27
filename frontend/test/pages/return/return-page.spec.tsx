@@ -1,6 +1,7 @@
 import ReturnPage from '@/pages/return/return-page';
+import { received } from '@/store/notification-slice';
 import { ReturnLoan } from '@/store/return-slice';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import mockFetch from '../../mock-fetch';
@@ -30,6 +31,7 @@ const dune: ReturnLoan = {
   reservedUntil: null,
   overdueDays: 0,
   fine: 0,
+  queuePosition: null,
 };
 
 const kokoro: ReturnLoan = {
@@ -45,6 +47,7 @@ const kokoro: ReturnLoan = {
   reservedUntil: null,
   overdueDays: 3,
   fine: 3,
+  queuePosition: null,
 };
 
 const emma: ReturnLoan = {
@@ -60,6 +63,7 @@ const emma: ReturnLoan = {
   reservedUntil: null,
   overdueDays: 6,
   fine: 6,
+  queuePosition: null,
 };
 
 const brown: ReturnLoan = {
@@ -75,6 +79,23 @@ const brown: ReturnLoan = {
   reservedUntil: iso(7 * DAY),
   overdueDays: 0,
   fine: 0,
+  queuePosition: null,
+};
+
+const hamlet: ReturnLoan = {
+  id: 5,
+  isbn: '555',
+  title: 'Hamlet',
+  author: 'William Shakespeare',
+  genre: literary,
+  language: english,
+  status: 'QUEUED',
+  dueAt: null,
+  returnedAt: null,
+  reservedUntil: null,
+  overdueDays: 0,
+  fine: 0,
+  queuePosition: 1,
 };
 
 const filters = {
@@ -92,7 +113,7 @@ const list = (query: string, totalUnpaid = 6, page = 0): MockRoutes => ({
   [`GET /api/return?${query}`]: {
     status: 200,
     body: {
-      loans: [emma, kokoro, brown, dune],
+      loans: [emma, kokoro, brown, dune, hamlet],
       page,
       totalPages: 3,
       total: 30,
@@ -163,6 +184,57 @@ describe('ReturnPage', () => {
     expect(screen.queryByTestId('return-return-4')).not.toBeInTheDocument();
 
     expect(screen.getByTestId('return-pay-all')).toBeEnabled();
+  });
+
+  it('shows a queued row with its position and a Leave queue button', async () => {
+    renderPage();
+
+    expect(await screen.findByTestId('return-status-5')).toHaveTextContent('Queued');
+    expect(screen.getByTestId('return-row-5')).toHaveTextContent('Number 1 in queue');
+    expect(screen.getByTestId('return-unreserve-5')).toHaveTextContent('Leave queue');
+    expect(screen.queryByTestId('return-return-5')).not.toBeInTheDocument();
+  });
+
+  it('leaves the queue after confirming and reloads the list', async () => {
+    const { fetchMock } = renderPage({
+      'POST /api/return/5/unreserve': { status: 200, body: { ...hamlet, status: 'EXPIRED' } },
+    });
+
+    await userEvent.click(await screen.findByTestId('return-unreserve-5'));
+    const dialog = screen.getByTestId('return-confirm-dialog');
+    expect(dialog).toHaveTextContent('Leave the queue for Hamlet?');
+    expect(dialog).toHaveTextContent('The $5.00 fee is not refunded.');
+    expect(screen.getByTestId('return-confirm-confirm')).toHaveTextContent('Leave queue');
+
+    await userEvent.click(screen.getByTestId('return-confirm-confirm'));
+
+    await dialogClosed();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/return/5/unreserve',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    await called(fetchMock, FIRST, 2);
+  });
+
+  it('reloads the list when a live notification arrives', async () => {
+    const { fetchMock, store } = renderPage();
+    await screen.findByTestId('return-row-1');
+    expect(calls(fetchMock, FIRST)).toBe(1);
+
+    act(() => {
+      store.dispatch(
+        received({
+          id: 9,
+          type: 'AVAILABLE',
+          isbn: '555',
+          title: 'Hamlet',
+          createdAt: '2026-09-27T00:00:00Z',
+          read: false,
+        }),
+      );
+    });
+
+    await called(fetchMock, FIRST, 2);
   });
 
   it('cancels a reservation after confirming and reloads the list', async () => {

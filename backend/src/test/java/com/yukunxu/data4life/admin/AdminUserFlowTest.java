@@ -13,6 +13,9 @@ import com.yukunxu.data4life.catalogue.BookRepository;
 import com.yukunxu.data4life.loan.Loan;
 import com.yukunxu.data4life.loan.LoanRepository;
 import com.yukunxu.data4life.loan.LoanService;
+import com.yukunxu.data4life.notification.NotificationRepository;
+import com.yukunxu.data4life.notification.NotificationService;
+import com.yukunxu.data4life.notification.NotificationType;
 import com.yukunxu.data4life.user.User;
 import com.yukunxu.data4life.user.UserRepository;
 import java.time.Duration;
@@ -56,6 +59,12 @@ class AdminUserFlowTest {
 
     @Autowired
     private LoanRepository loanRepository;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
+    private NotificationRepository notificationRepository;
 
     private MockHttpSession root;
     private Instant now;
@@ -331,6 +340,24 @@ class AdminUserFlowTest {
         active.setReservedUntil(now.minus(Duration.ofMinutes(1)));
         remove(root, gus).andExpect(status().isNoContent());
         assertThat(loanRepository.existsByUser(gus)).isFalse();
+    }
+
+    @Test
+    void queuedRowBlocksDeletionAndNotificationsGoWithTheUser() throws Exception {
+        signUp("Gus", "gus@example.com");
+        User gus = user("gus@example.com");
+        Loan queued = loanRepository.save(Loan.queued(gus, bookRepository.findById(DUNE).orElseThrow(), now));
+        notificationService.send(queued, NotificationType.AVAILABLE);
+        notificationService.send(queued, NotificationType.REMOVED_UNPAID);
+
+        remove(root, gus).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("User still has a reservation"));
+
+        queued.setReleasedAt(now);
+        remove(root, gus).andExpect(status().isNoContent());
+        assertThat(notificationRepository.count()).isZero();
+        assertThat(loanRepository.existsByUser(gus)).isFalse();
+        assertThat(userRepository.findByEmail("gus@example.com")).isEmpty();
     }
 
     @Test

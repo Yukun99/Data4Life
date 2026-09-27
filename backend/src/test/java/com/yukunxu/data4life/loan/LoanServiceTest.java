@@ -338,6 +338,55 @@ class LoanServiceTest {
         assertThat(loanService.borrowBlock(user, now)).isEqualTo("You already hold 8 books");
     }
 
+    @Test
+    void queuedLeftAndRemovedStatuses() {
+        Loan queued = loanRepository.save(Loan.queued(user, bookRepository.findById(SAPIENS).orElseThrow(), now));
+        Loan left = loanRepository.save(Loan.queued(user, bookRepository.findById(CHRISTIE).orElseThrow(), now));
+        left.setReleasedAt(now);
+        Loan removed = loanRepository.save(Loan.queued(user, bookRepository.findById(KOKORO).orElseThrow(), now));
+        removed.setReleasedAt(now);
+        removed.setRemovedAt(now);
+
+        assertThat(LoanService.status(queued, now)).isEqualTo(LoanStatus.QUEUED);
+        assertThat(LoanService.status(left, now)).isEqualTo(LoanStatus.EXPIRED);
+        assertThat(LoanService.status(removed, now)).isEqualTo(LoanStatus.REMOVED);
+        assertThat(LoanService.isHolding(queued)).isTrue();
+        assertThat(LoanService.isHolding(removed)).isFalse();
+        assertThat(LoanService.toResponse(queued, now).fee()).isEqualByComparingTo("5.00");
+        assertThat(LoanService.toResponse(queued, now).reservedUntil()).isNull();
+    }
+
+    @Test
+    void releaseExpiredServesTheQueue() {
+        Book dune = bookRepository.findById(DUNE).orElseThrow();
+        dune.setStock(0);
+        Loan expired = reserve(DUNE, now.minus(Duration.ofHours(1)));
+        User bob = userRepository.save(new User("bob@example.com", "Bob", "hash"));
+        Loan queued = loanRepository.save(Loan.queued(bob, dune, now));
+
+        loanService.releaseExpired();
+
+        assertThat(expired.getReleasedAt()).isNotNull();
+        assertThat(queued.getReservedUntil()).isNotNull();
+        assertThat(LoanService.status(queued, Instant.now())).isEqualTo(LoanStatus.RESERVED);
+        assertThat(dune.getStock()).isZero();
+    }
+
+    @Test
+    void fineBlockIgnoresTheCap() {
+        for (int i = 0; i < LoanService.MAX_HOLDINGS; i++) {
+            reserve(SAPIENS, now.plus(days(3)));
+        }
+        assertThat(loanService.fineBlock(user, now)).isNull();
+        assertThat(loanService.borrowBlock(user, now)).isEqualTo("You already hold 8 books");
+
+        loan(KOKORO, now.minus(days(20)), null, null);
+        assertThat(loanService.fineBlock(user, now)).isEqualTo("You have an overdue book");
+
+        loan(CHRISTIE, now.minus(days(40)), now.minus(days(20)), null);
+        assertThat(loanService.fineBlock(user, now)).isEqualTo("You have unpaid fines");
+    }
+
     private Loan reserve(String isbn, Instant reservedUntil) {
         return loanRepository.save(Loan.reserved(user, bookRepository.findById(isbn).orElseThrow(),
                 reservedUntil.minus(days(LoanService.RESERVE_DAYS)), reservedUntil));

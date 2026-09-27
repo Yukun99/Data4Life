@@ -25,7 +25,8 @@ paths:
   (`BorrowController`, `BorrowService`, `/api/borrow`), `returns/` holds the return page endpoints
   (`ReturnController`, `ReturnService`, `/api/return`; named `returns` because `return` is a Java
   keyword), `admin/` holds the admin users page endpoints
-  (`AdminUserController`, `AdminUserService`, `/api/admin/users`), and `config/` holds the security setup and the JSON error
+  (`AdminUserController`, `AdminUserService`, `/api/admin/users`), `notification/` holds the in-app
+  notifications and their live stream (`/api/notifications`), and `config/` holds the security setup and the JSON error
   handler. A new feature gets its own package with its controller, service, repository
   and entities together; cross-cutting configuration goes in a `config/` package when needed.
 - Every HTTP route sits under `/api/`; that prefix is what the Vite dev proxy and the Nginx
@@ -46,8 +47,10 @@ paths:
   with `403`, and logs the session out.
 - Public routes: `POST /api/users`, `POST /api/auth/login`, `GET /api/ping` and
   `/actuator/health`. Everything else needs a session and answers `401` without one, including
-  `PUT /api/users/me`, `/api/interests/**`, `/api/loans/**`, `/api/borrow/**` and `/api/return/**`, which any logged-in
-  user may call; there are no login redirects or forms.
+  `PUT /api/users/me`, `/api/interests/**`, `/api/loans/**`, `/api/borrow/**`, `/api/return/**` and
+  `/api/notifications/**`, which any logged-in user may call; there are no login redirects or forms.
+- Async dispatches are permitted in `SecurityConfig`, because the notification stream's completion
+  dispatch comes after the request itself has already been checked.
 - `/api/books/**`, `/api/catalogue/**` and `/api/admin/**` are admin only, both as a URL rule in
   `SecurityConfig` and through `@PreAuthorize` on `BookController`, `ColumnController` and
   `AdminUserController`. Non-admins get
@@ -79,18 +82,27 @@ paths:
   the tables on the first `./mvnw spring-boot:run`.
 - Genres, languages and ten sample books are seeded by migrations. Loans last 14 days and overdue
   fines are $1.00 per started day (`LoanService`). A loan's status (borrowed, overdue, returned,
-  unpaid, paid, forgiven, reserved, expired) and fine are derived from its dates and are never stored
-  themselves. A fine being paid or forgiven is stored as a timestamp (`fine_paid_at`,
+  unpaid, paid, forgiven, reserved, expired, queued, removed) and fine are derived from its dates and are
+  never stored themselves. A fine being paid or forgiven is stored as a timestamp (`fine_paid_at`,
   `fine_forgiven_at`); paid wins when both are set.
 - A reservation is a `loans` row with `reserved_at` and `reserved_until` set and no `borrowed_at`.
   It holds a copy for 7 days and costs a $5.00 fee (`LoanService.RESERVE_FEE`), paid when reserving
   and shown on the history row as `fee`; it is not a fine. Once `reserved_until` has passed it is
   expired, and `released_at` records when its copy went back into stock, so that happens exactly
   once. Borrowing a reserved book fills in `borrowed_at` and `due_at` on the same row.
-- A book's `stock` is always `amount` minus its holdings: open loans (no return date) plus
-  reservations not yet released. The catalogue endpoints only take `amount` and recompute `stock`;
-  an amount below the holdings is rejected. Returning a book sets `returned_at` and puts its copy
-  back into stock.
+- Reserving a book that is out of stock joins its queue instead: a queued row is a reservation with
+  `reserved_until` still null. The $5.00 fee is paid when joining, and queued rows count toward the 8
+  book limit. The queue is first come, first served per book (`reserved_at`, then `id`). Whenever a copy
+  comes back (a return, a cancelled or expired reservation, or a raised `amount`),
+  `LoanService.serveQueue` gives it to the first queued user by setting `reserved_until` to 7 days from
+  then. A queued user with unpaid fines or an overdue book at that moment is removed instead:
+  `removed_at` and `released_at` are set, the fee is not refunded, and the copy goes to the next user.
+  Leaving the queue sets only `released_at`, so the row shows as expired.
+- A book's `stock` is always `amount` minus the copies held: open loans (no return date) plus
+  reservations that have a copy and are not yet released. Queued rows hold no copy, and a non-empty
+  queue means `stock` is 0. The catalogue endpoints only take `amount` and recompute `stock`; an amount
+  below the copies held is rejected. Returning a book sets `returned_at` and puts its copy back into
+  stock or hands it to the queue.
 - Expired reservations are released whenever the borrow page, the history, a catalogue update or a
   user delete needs exact numbers, and by `ReservationReleaser` every 10 minutes
   (`@EnableScheduling`), so catalogue stock does not go stale when nobody opens those pages.
@@ -115,14 +127,16 @@ paths:
 
 - `GET /api/borrow` lists books for any logged-in user with the same paging, sorting and filter
   parameters as `GET /api/books`, except that `amount` cannot be sorted on. Each book carries
-  `stock` and `holding` (`BORROWED` for an open loan, `RESERVED` for an active reservation, or
-  null). The response also carries `block`: null when the user may borrow, otherwise the reason
+  `stock`, `holding` (`BORROWED` for an open loan, `RESERVED` for an active reservation, `QUEUED` for a
+  place in the queue, or null), `queueLength` and `queuePosition` (the caller's place, counted from 1,
+  or null). The response also carries `block`: null when the user may borrow, otherwise the reason
   (unpaid fines, an overdue book, or already holding 8 books, checked in that order), and
   `convertBlock`, the same reason except that holding 8 books does not stop a reservation being
   borrowed, so the frontend can keep that one button enabled.
 - `POST /api/borrow/{isbn}` borrows a book for 14 days and `POST /api/borrow/{isbn}/reserve`
-  reserves it; both answer the updated book and `409` with a message when refused (already on loan,
-  already reserved, blocked, or out of stock). Borrowing a book the user has reserved turns the
+  reserves it, or joins its queue when it is out of stock; both answer the updated book and `409` with a
+  message when refused (already on loan, already reserved or queued, blocked, still in the queue, or out
+  of stock when borrowing). Borrowing a book the user has reserved turns the
   reservation into a loan without touching stock, and the 8 book limit does not apply to that.
   The book row is locked (`BookRepository.lockByIsbn`) so two users cannot take the last copy.
 - `GET` and `PUT /api/borrow/columns` store the user's borrow table column widths (five
@@ -135,21 +149,40 @@ paths:
   catalogue. Sort keys are `isbn`, `title`, `author`, `genre`, `language` and `due` (the default,
   ascending; a reservation sorts by `reservedUntil`); filters are `isbn`, `title`, `author`,
   `genreId` and `languageId`. Each row carries the loan `id`, the book details, `status`
-  (`BORROWED`, `OVERDUE`, `UNPAID` or `RESERVED`), `dueAt`, `returnedAt`, `reservedUntil`,
-  `overdueDays` and `fine`. The response also carries the filter options (distinct values across
+  (`BORROWED`, `OVERDUE`, `UNPAID`, `RESERVED` or `QUEUED`), `dueAt`, `returnedAt`, `reservedUntil`,
+  `overdueDays`, `fine` and `queuePosition` (null unless queued). Queued rows have no date and sort last
+  by `due` in ascending order. The response also carries the filter options (distinct values across
   the caller's rows) and `totalUnpaid`, the sum of the unpaid fines. Expired reservations are
   released first, so they never appear. A user holds few loans, so this list is filtered, sorted
   and paged in memory like the admin users list.
 - `POST /api/return/{loanId}` returns a loan and answers the updated row: `404` when the loan is
   not the caller's, `409` when it is a reservation or was already returned. It locks the book row
-  and puts the copy back into stock. A late return then shows as `UNPAID`, and the fine is paid
+  and puts the copy back into stock or hands it to the queue. A late return then shows as `UNPAID`, and the fine is paid
   through the existing `/api/loans/{id}/pay` and `/api/loans/pay-all` endpoints.
-- `POST /api/return/{loanId}/unreserve` cancels an active reservation: it sets `released_at` and
-  puts the copy back into stock, so the row shows as `EXPIRED` in the history afterwards. The fee is
-  not refunded. `404` when the loan is not the caller's, `409` when it is a loan rather than a
+- `POST /api/return/{loanId}/unreserve` cancels an active reservation or leaves the queue: it sets
+  `released_at` and, for an active reservation, puts the copy back into stock or hands it to the queue,
+  so the row shows as `EXPIRED` in the history afterwards. The fee is not refunded. `404` when the loan is not the caller's, `409` when it is a loan rather than a
   reservation or the reservation has already ended.
 - `GET` and `PUT /api/return/columns` store the user's return table column widths (five
   percentages) in `users.return_columns`, the same way as the catalogue column widths.
+
+## Notification Endpoints
+
+- A notification belongs to a user and points at a loan (`notifications` table), so book merges and
+  ISBN changes need no extra handling. Types are `AVAILABLE` (a queued copy is ready), `REMOVED_UNPAID`
+  and `REMOVED_OVERDUE` (removed from a queue, with the reason). They are kept until the user deletes
+  them, and are deleted along with the user.
+- `GET /api/notifications?before=<id>` lists the caller's notifications newest first, 20 at a time;
+  `before` is the id of the last item already shown, and `hasMore` says whether older ones exist. Each
+  item carries `id`, `type`, `isbn`, `title`, `createdAt` and `read`.
+- `GET /api/notifications/unread` answers `{ "count": n }`. `POST /api/notifications/{id}/read`,
+  `POST /api/notifications/read-all`, `DELETE /api/notifications/{id}` and `DELETE /api/notifications`
+  change the notifications and answer the new unread count. Another user's notification answers `404`.
+- `GET /api/notifications/stream` is a Server-Sent Events stream (`NotificationStream`). A new
+  notification is sent as an event named `notification` once its transaction commits, and a comment
+  every 25 seconds keeps proxies from closing the idle connection. Each stream lasts 30 minutes and the
+  browser reconnects by itself. The response carries `X-Accel-Buffering: no`, and `frontend/nginx.conf`
+  has a separate unbuffered location for this path.
 
 ## Admin User Endpoints
 
@@ -169,8 +202,8 @@ paths:
 - Borrow counts only include real loans, not reservations.
 - `DELETE /api/admin/users/{id}` removes a user with their loans and interests. Who may delete whom
   follows the demotion rules (never root, never yourself, an admin only by root or their promoter,
-  a non-admin by any admin). It answers `409` while the user still has books on loan, an active
-  reservation or unpaid fines, so those must be returned, expire, or be paid or forgiven first. Users the deleted admin had promoted
+  a non-admin by any admin). It answers `409` while the user still has books on loan, an active or
+  queued reservation or unpaid fines, so those must be returned, expire, or be paid or forgiven first. Users the deleted admin had promoted
   keep their admin flag with no recorded promoter. Each row carries `deletable` for the caller.
 - `GET /api/admin/users/{id}/fines` lists the user's loans that carry a fine, and
   `POST /api/admin/users/{id}/loans/{loanId}/forgive` forgives an unpaid fine (`409` for any other
@@ -184,13 +217,17 @@ paths:
   context; `PingControllerTest` is a `@WebMvcTest` slice (it uses `@WithMockUser`, because the
   slice does not load `SecurityConfig`). `UserFlowTest` covers the whole sign-up and login flow
   through `MockMvc`, carrying the session between requests; `InterestFlowTest`, `LoanFlowTest`,
-  `BookFlowTest`, `ColumnFlowTest`, `BorrowFlowTest`, `ReturnFlowTest` and `AdminUserFlowTest` do the same for their
-  routes, and `LoanServiceTest` covers every loan status, fine rule, borrow block and reservation
-  release. `AdminUserFlowTest` also checks that a
+  `BookFlowTest`, `ColumnFlowTest`, `BorrowFlowTest`, `ReturnFlowTest`, `AdminUserFlowTest` and
+  `NotificationFlowTest` do the same for their routes, and `LoanServiceTest` covers every loan status,
+  fine rule, borrow block, reservation release and queue hand-over. `NotificationStreamTest` is a plain
+  unit test of the stream. `AdminUserFlowTest` also checks that a
   demoted admin's old session answers `401`, the delete rules and self-deletion.
 - Full-context tests carry `@ActiveProfiles("test")`, which loads `application-test.yml` (H2
   in-memory, PostgreSQL mode) on top of `application.yml`. Keep it a profile file rather than a
   second `application.yml`, because a test `application.yml` would shadow the main one entirely.
+- Flow tests are `@Transactional` and roll back, so after-commit listeners never run in them. Check
+  notifications through the REST list and the published `NotificationCreated` event with
+  `@RecordApplicationEvents`.
 - H2 is test scope only. When Docker is available on the dev machine, Testcontainers can replace it.
 
 ## Docker

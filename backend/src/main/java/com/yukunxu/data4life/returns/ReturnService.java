@@ -1,7 +1,6 @@
 package com.yukunxu.data4life.returns;
 
 import com.yukunxu.data4life.admin.AdminUserService;
-import com.yukunxu.data4life.catalogue.Book;
 import com.yukunxu.data4life.catalogue.BookRepository;
 import com.yukunxu.data4life.interest.NamedItem;
 import com.yukunxu.data4life.loan.Loan;
@@ -42,10 +41,11 @@ public class ReturnService {
                     String.CASE_INSENSITIVE_ORDER),
             "language", Comparator.comparing((ReturnLoanResponse row) -> row.language().name(),
                     String.CASE_INSENSITIVE_ORDER),
-            "due", Comparator.comparing(ReturnLoanResponse::until));
+            "due", Comparator.comparing(ReturnLoanResponse::until,
+                    Comparator.nullsLast(Comparator.naturalOrder())));
 
     private static final Set<LoanStatus> LISTED = EnumSet.of(LoanStatus.BORROWED, LoanStatus.OVERDUE,
-            LoanStatus.UNPAID, LoanStatus.RESERVED);
+            LoanStatus.UNPAID, LoanStatus.RESERVED, LoanStatus.QUEUED);
 
     private final LoanRepository loanRepository;
     private final BookRepository bookRepository;
@@ -74,9 +74,17 @@ public class ReturnService {
         }
         loanService.releaseExpired();
         Instant now = Instant.now();
-        List<ReturnLoanResponse> all = loanRepository.findByUserNewestFirst(user).stream()
-                .map(loan -> ReturnLoanResponse.from(loan, now))
-                .filter(row -> LISTED.contains(row.status()))
+        List<Loan> listed = loanRepository.findByUserNewestFirst(user).stream()
+                .filter(loan -> LISTED.contains(LoanService.status(loan, now)))
+                .toList();
+        Map<String, List<Loan>> queues = loanService.queues(listed.stream()
+                .filter(loan -> LoanService.status(loan, now) == LoanStatus.QUEUED)
+                .map(loan -> loan.getBook().getIsbn())
+                .toList());
+        List<ReturnLoanResponse> all = listed.stream()
+                .map(loan -> ReturnLoanResponse.from(loan, now, LoanService.status(loan, now) != LoanStatus.QUEUED
+                        ? null
+                        : LoanService.queuePosition(queues.get(loan.getBook().getIsbn()), user.getId())))
                 .toList();
         List<ReturnLoanResponse> matching = all.stream()
                 .filter(matches(filter))
@@ -96,9 +104,11 @@ public class ReturnService {
         return new ReturnLoansResponse(slice, current, totalPages, matching.size(), options(all), totalUnpaid);
     }
 
+    /** Returns a loan; the copy goes back into stock or to the first eligible user in the queue. */
     @Transactional
     public ReturnLoanResponse returnLoan(User user, Long loanId) {
-        Loan loan = find(user, loanId);
+        String isbn = lockBook(user, loanId);
+        Loan loan = loanRepository.findById(loanId).orElseThrow();
         if (loan.getBorrowedAt() == null) {
             throw conflict("This is a reservation");
         }
@@ -107,35 +117,36 @@ public class ReturnService {
         }
         Instant now = Instant.now();
         loan.setReturnedAt(now);
-        putBack(loan);
-        return ReturnLoanResponse.from(loan, now);
+        loanService.putBack(isbn, now);
+        return ReturnLoanResponse.from(loan, now, null);
     }
 
-    /** Cancels an active reservation; the fee is not refunded and the row shows as expired afterwards. */
+    /** Cancels an active or queued reservation; the fee is not refunded and the row shows as expired afterwards. */
     @Transactional
     public ReturnLoanResponse unreserve(User user, Long loanId) {
-        Loan loan = find(user, loanId);
+        String isbn = lockBook(user, loanId);
+        Loan loan = loanRepository.findById(loanId).orElseThrow();
         if (loan.getBorrowedAt() != null) {
             throw conflict("This is not a reservation");
         }
         Instant now = Instant.now();
-        if (LoanService.status(loan, now) != LoanStatus.RESERVED) {
+        LoanStatus status = LoanService.status(loan, now);
+        if (status != LoanStatus.RESERVED && status != LoanStatus.QUEUED) {
             throw conflict("This reservation has already ended");
         }
         loan.setReleasedAt(now);
-        putBack(loan);
-        return ReturnLoanResponse.from(loan, now);
+        if (status == LoanStatus.RESERVED) {
+            loanService.putBack(isbn, now);
+        }
+        return ReturnLoanResponse.from(loan, now, null);
     }
 
-    private Loan find(User user, Long loanId) {
-        return loanRepository.findById(loanId)
-                .filter(found -> found.getUser().getId().equals(user.getId()))
+    /** Locks the book of the caller's loan before the loan is read, so queue changes on it run one at a time. */
+    private String lockBook(User user, Long loanId) {
+        String isbn = loanRepository.isbnOf(loanId, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Loan not found"));
-    }
-
-    private void putBack(Loan loan) {
-        Book book = bookRepository.lockByIsbn(loan.getBook().getIsbn()).orElseThrow();
-        book.setStock(Math.min(book.getAmount(), book.getStock() + 1));
+        bookRepository.lockByIsbn(isbn);
+        return isbn;
     }
 
     @Transactional(readOnly = true)

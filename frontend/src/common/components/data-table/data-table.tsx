@@ -13,6 +13,7 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
+import { keyframes, Theme } from '@mui/material/styles';
 import { ReactNode } from 'react';
 
 type DataTableProps<Row, C extends string, S extends string> = {
@@ -30,9 +31,19 @@ type DataTableProps<Row, C extends string, S extends string> = {
   error: string;
   emptyText: string;
   testIdPrefix: string;
+  flashKey?: string | number | null;
+  onFlashEnd?: () => void;
 };
 
 const ellipsis = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const;
+
+const flashSx = (theme: Theme) => {
+  const colour = theme.alpha((theme.vars ?? theme).palette.secondary.main, 0.4);
+  const flash = keyframes`50% { background-color: ${colour}; }`;
+  return { animation: `${flash} 0.6s ease-in-out 3` };
+};
+
+const scrollTo = (node: HTMLTableRowElement | null) => node?.scrollIntoView?.({ block: 'center' });
 
 const Line = ({ text, secondary = false }: { text: string; secondary?: boolean }) => (
   <Typography
@@ -59,6 +70,8 @@ const DataTable = <Row, C extends string, S extends string>({
   error,
   emptyText,
   testIdPrefix,
+  flashKey = null,
+  onFlashEnd,
 }: DataTableProps<Row, C, S>) => {
   const order = columns.map((column) => column.key);
   const { startResize } = useColumnResize({
@@ -149,11 +162,22 @@ const DataTable = <Row, C extends string, S extends string>({
                 {emptyText}
               </Typography>,
             )}
-          {rows.map((row) => (
-            <TableRow key={rowKey(row)} hover data-testid={rowTestId(row)}>
-              {columns.map((column) => cell(column, row))}
-            </TableRow>
-          ))}
+          {rows.map((row) => {
+            const flashing = flashKey !== null && rowKey(row) === flashKey;
+            return (
+              <TableRow
+                key={rowKey(row)}
+                hover
+                data-testid={rowTestId(row)}
+                data-flash={flashing || undefined}
+                ref={flashing ? scrollTo : undefined}
+                onAnimationEnd={flashing ? onFlashEnd : undefined}
+                sx={flashing ? flashSx : undefined}
+              >
+                {columns.map((column) => cell(column, row))}
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </TableContainer>

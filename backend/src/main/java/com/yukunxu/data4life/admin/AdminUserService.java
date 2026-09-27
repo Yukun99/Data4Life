@@ -5,6 +5,7 @@ import com.yukunxu.data4life.loan.LoanRepository;
 import com.yukunxu.data4life.loan.LoanResponse;
 import com.yukunxu.data4life.loan.LoanService;
 import com.yukunxu.data4life.loan.LoanStatus;
+import com.yukunxu.data4life.notification.NotificationService;
 import com.yukunxu.data4life.user.User;
 import com.yukunxu.data4life.user.UserRepository;
 import com.yukunxu.data4life.user.UserService;
@@ -48,14 +49,16 @@ public class AdminUserService {
     private final UserRepository userRepository;
     private final LoanRepository loanRepository;
     private final LoanService loanService;
+    private final NotificationService notificationService;
     private final SessionRegistry sessionRegistry;
 
     public AdminUserService(UserService userService, UserRepository userRepository, LoanRepository loanRepository,
-            LoanService loanService, SessionRegistry sessionRegistry) {
+            LoanService loanService, NotificationService notificationService, SessionRegistry sessionRegistry) {
         this.userService = userService;
         this.userRepository = userRepository;
         this.loanRepository = loanRepository;
         this.loanService = loanService;
+        this.notificationService = notificationService;
         this.sessionRegistry = sessionRegistry;
     }
 
@@ -226,6 +229,7 @@ public class AdminUserService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "User still has unpaid fines");
         }
         userRepository.findByPromotedById(user.getId()).forEach(promoted -> promoted.setPromotedById(null));
+        notificationService.deleteAll(user);
         loanRepository.deleteAll(loans);
         userRepository.delete(user);
         expireSessions(user);

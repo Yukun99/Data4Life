@@ -4,6 +4,7 @@ import com.yukunxu.data4life.interest.NamedItem;
 import com.yukunxu.data4life.loan.LoanRepository;
 import com.yukunxu.data4life.loan.LoanService;
 import jakarta.persistence.criteria.Predicate;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -86,14 +87,15 @@ public class BookService {
     @Transactional
     public BookResponse update(String isbn, BookRequest request) {
         loanService.releaseExpired();
-        Book book = find(isbn);
-        int open = (int) loanRepository.countByBookAndReturnedAtIsNullAndReleasedAtIsNull(book);
+        Book book = lock(isbn);
+        int open = (int) loanRepository.countCopiesHeld(book);
         checkAmount(request.amount(), open);
         Genre genre = genre(request);
         Language language = language(request);
         String newIsbn = request.isbn().trim();
         if (newIsbn.equals(book.getIsbn())) {
             apply(book, request, genre, language, open);
+            loanService.serveQueue(book, Instant.now());
             return BookResponse.from(book);
         }
         if (bookRepository.existsById(newIsbn)) {
@@ -103,7 +105,9 @@ public class BookService {
                 request.author().trim(), genre, language, request.amount(), request.amount() - open));
         loanRepository.repoint(book, moved);
         bookRepository.deleteById(isbn);
-        return BookResponse.from(find(newIsbn));
+        Book result = find(newIsbn);
+        loanService.serveQueue(result, Instant.now());
+        return BookResponse.from(result);
     }
 
     @Transactional
@@ -113,11 +117,10 @@ public class BookService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot merge a book into itself");
         }
         loanService.releaseExpired();
-        Book source = find(sourceIsbn);
-        Book target = bookRepository.findById(targetIsbn)
+        Book source = lock(sourceIsbn);
+        Book target = bookRepository.lockByIsbn(targetIsbn)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Merge target not found"));
-        int open = (int) (loanRepository.countByBookAndReturnedAtIsNullAndReleasedAtIsNull(source)
-                + loanRepository.countByBookAndReturnedAtIsNullAndReleasedAtIsNull(target));
+        int open = (int) (loanRepository.countCopiesHeld(source) + loanRepository.countCopiesHeld(target));
         checkAmount(request.amount(), open);
         Long genreId = genre(request).getId();
         Long languageId = language(request).getId();
@@ -126,6 +129,7 @@ public class BookService {
         Book merged = find(targetIsbn);
         apply(merged, request, genreRepository.getReferenceById(genreId),
                 languageRepository.getReferenceById(languageId), open);
+        loanService.serveQueue(merged, Instant.now());
         return BookResponse.from(merged);
     }
 
@@ -190,6 +194,11 @@ public class BookService {
         if (amount < open) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Amount is below copies on loan");
         }
+    }
+
+    private Book lock(String isbn) {
+        return bookRepository.lockByIsbn(isbn)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
     }
 
     private Book find(String isbn) {
