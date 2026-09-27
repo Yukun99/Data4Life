@@ -1,5 +1,6 @@
 package com.yukunxu.data4life.user;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -25,6 +26,9 @@ class UserFlowTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private UserService userService;
 
     @Test
     void createLoginMeLogout() throws Exception {
@@ -68,6 +72,41 @@ class UserFlowTest {
         mockMvc.perform(get("/api/auth/me").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.admin").value(true));
+    }
+
+    @Test
+    void seedAdminCreatesAdminThatCanLogIn() throws Exception {
+        userService.seedAdmin("seed-test-1");
+
+        login("admin@example.com", "seed-test-1")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Admin"))
+                .andExpect(jsonPath("$.admin").value(true));
+    }
+
+    @Test
+    void seedAdminKeepsExistingAccount() throws Exception {
+        createUser("Ada", "admin@example.com", "secret123").andExpect(status().isCreated());
+
+        userService.seedAdmin("seed-test-1");
+
+        login("admin@example.com", "seed-test-1").andExpect(status().isUnauthorized());
+        login("admin@example.com", "secret123")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Ada"));
+    }
+
+    @Test
+    void seedAdminWithoutPasswordDoesNothing() throws Exception {
+        userService.seedAdmin("");
+
+        login("admin@example.com", "seed-test-1").andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void seedAdminRejectsInvalidPassword() {
+        assertThrows(IllegalStateException.class, () -> userService.seedAdmin("short"));
+        assertThrows(IllegalStateException.class, () -> userService.seedAdmin("has spaces 123"));
     }
 
     @Test

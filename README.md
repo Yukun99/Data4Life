@@ -89,7 +89,8 @@ A user is returned as `{ id, name, email, createdAt, admin, avatar }`; errors as
 
 ## Deploy
 
-On the Docker host, copy `.env.example` to `.env`, set the database password, then:
+On the Docker host, copy `.env.example` to `.env`, set the database password and optionally
+`ADMIN_EMAIL` and `ADMIN_PASSWORD` (the admin account is then created at startup), then:
 
 ```sh
 docker compose up -d --build

@@ -52,6 +52,21 @@ public class UserService implements UserDetailsService {
         return !adminEmail.isEmpty() && adminEmail.equals(user.getEmail());
     }
 
+    /** Creates the admin account when it does not exist yet; an existing account is left alone. */
+    @Transactional
+    public void seedAdmin(String password) {
+        if (adminEmail.isEmpty() || password == null || password.isEmpty()
+                || repository.existsByEmail(adminEmail)) {
+            return;
+        }
+        if (!password.matches("\\S{8,32}")) {
+            throw new IllegalStateException("ADMIN_PASSWORD must be 8 to 32 characters with no spaces");
+        }
+        User user = new User(adminEmail, "Admin", passwordEncoder.encode(password));
+        user.setAdmin(true);
+        repository.save(user);
+    }
+
     @Transactional
     public void promoteAdmin() {
         if (adminEmail.isEmpty()) {

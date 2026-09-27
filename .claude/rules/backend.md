@@ -34,7 +34,9 @@ paths:
 - Request and response bodies are Java records. No Lombok.
 - Constructor injection only; no field `@Autowired`.
 - Configuration comes from `application.yml` and is overridable with environment variables:
-  `DB_URL`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `ADMIN_EMAIL` (read as `app.admin-email`).
+  `DB_URL`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `ADMIN_EMAIL` (read as `app.admin-email`) and
+  `ADMIN_PASSWORD` (`app.admin-password`). A local run also reads these from the root `.env` through
+  `spring.config.import`; real environment variables win over the file.
   Never commit real credentials; `docker-compose.yml` reads them from the gitignored `.env`.
 
 ## Security
@@ -56,7 +58,10 @@ paths:
   `AdminUserController`. Non-admins get
   `403 { "message": "Forbidden" }`.
 - Users have an `is_admin` flag. The account whose email matches `ADMIN_EMAIL` becomes admin on
-  sign-up, and `AdminPromoter` promotes it at startup if it already exists. Admins get `ROLE_ADMIN`
+  sign-up, and `AdminPromoter` promotes it at startup if it already exists. With `ADMIN_PASSWORD`
+  also set, `AdminPromoter` creates that account at startup when it is missing
+  (`UserService.seedAdmin`); an existing account keeps its password, and a password that breaks the
+  sign-up rules stops the startup. Admins get `ROLE_ADMIN`
   on top of `ROLE_USER`, and `@EnableMethodSecurity` is on, so admin-only endpoints can use
   `@PreAuthorize("hasRole('ADMIN')")`. That `ADMIN_EMAIL` account is the root admin
   (`UserService.isRoot`). With `ADMIN_EMAIL` unset nobody is root, so admins with no recorded

@@ -7,3 +7,4 @@ spring:
 
 app:
   admin-email: admin@example.com
+  admin-password: ''
