@@ -1,4 +1,4 @@
-import { createTheme } from '@mui/material/styles';
+import { createTheme, lighten } from '@mui/material/styles';
 
 const navy = '#000040';
 const peach = '#FFDACF';
@@ -11,6 +11,8 @@ const theme = createTheme({
         primary: { main: navy, contrastText: peach },
         background: { default: peach, paper: peach },
         text: { primary: navy },
+        // MUI darkens white by 0.68 for dark-mode row borders; this is the inverse of that grey.
+        TableCell: { border: lighten('#000', 0.68) },
       },
     },
     dark: {

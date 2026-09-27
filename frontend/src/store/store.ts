@@ -1,6 +1,7 @@
 import { borrowReducer } from '@/store/borrow-slice';
 import { catalogueReducer } from '@/store/catalogue-slice';
 import { historyReducer } from '@/store/history-slice';
+import { returnReducer } from '@/store/return-slice';
 import { userReducer } from '@/store/user-slice';
 import { usersReducer } from '@/store/users-slice';
 import { combineReducers, configureStore } from '@reduxjs/toolkit';
@@ -11,6 +12,7 @@ const rootReducer = combineReducers({
   history: historyReducer,
   users: usersReducer,
   borrow: borrowReducer,
+  returns: returnReducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;

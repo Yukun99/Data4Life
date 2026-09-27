@@ -84,8 +84,8 @@ A user is returned as `{ id, name, email, createdAt, admin, avatar }`; errors as
   becomes payable on return.
 - "Total Overdue Fines" and "Pay all" cover only returned books with unpaid fines.
 - A user can pick at most 10 interests in total across genres and languages.
-- For the demo, every user without loans gets five sample loans at startup, one for each status.
-  This seeder is marked for removal once borrowing and returning exist.
+- A book is returned from the Return page, which puts the copy back into stock and makes any late
+  fine payable. The same page cancels a reservation; the $5.00 fee is not refunded.
 
 ## Deploy
 

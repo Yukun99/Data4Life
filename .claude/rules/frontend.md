@@ -76,9 +76,21 @@ cycles. Only `app/` exists at first; create the others when something belongs th
   (saved at `/api/borrow/columns`) and the thunks for every `/api/borrow` call.
   `pages/borrow/hooks/use-borrow-action.ts` drives the confirm dialog and reloads the list after a
   change.
+- `/return` lists the user's open loans, active reservations and returned loans that still carry
+  an unpaid fine, built on the data table framework. The columns are ISBN, Title / Author,
+  Genre / Language, Status (a status chip over the due date, the reservation end date or the fine
+  so far, sorted by that date) and Actions. An open loan offers Return, a reservation offers
+  Unreserve (the fee is not refunded), an unpaid row offers Pay fine, and a Pay all button in the
+  toolbar pays every unpaid fine (disabled when nothing is owed). Every action asks for
+  confirmation first; returning an overdue book says what fine becomes payable. The `returns`
+  slice (`store/return-slice.ts`) holds the list, its query values, the unpaid total, the column
+  widths (saved at `/api/return/columns`) and the thunks for returning and unreserving
+  (`/api/return`) and paying (`/api/loans`). `use-return-loans.ts` and
+  `use-return-columns.ts` under `pages/return/hooks/` dispatch them, and `use-return-action.ts`
+  drives the confirm dialog and reloads the list after a change.
 - `common/components/confirm-dialog.tsx` is the shared confirm dialog (title, body, confirm label,
-  error and loading state). It is used for borrowing and reserving, paying fines on the profile page
-  and forgiving a fine on the users page. Older dialogs keep their own components.
+  error and loading state). It is used for borrowing and reserving, returning books and paying fines on
+  the return page, paying fines on the profile page and forgiving a fine on the users page. Older dialogs keep their own components.
 - `/catalogue` is the admin book table, built on the data table framework described below. The
   list, the page, size, sort and filter values and the filter options live in the `catalogue` slice
   (`store/catalogue-slice.ts`), which also holds the thunks for every `/api/books` call. The add,
@@ -130,7 +142,7 @@ sends the page, size, sort and filter values.
   per field) complete a page. `buildQuery` (`build-query.ts`) writes the list query string in a
   fixed order (`page`, `size`, `sort`, `dir`, then set filters in the given key order) so specs can
   stub exact URLs.
-- Three pages use it: `/catalogue`, `/users` and `/borrow`.
+- Four pages use it: `/catalogue`, `/users`, `/borrow` and `/return`.
 - To add a table page: define its column keys, default widths, sort keys and filter keys in a slice
   with the same reducers as the catalogue or users slice, write the column specs in a page
   component, and pass the slice values and actions to these components.

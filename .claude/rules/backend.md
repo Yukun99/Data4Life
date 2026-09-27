@@ -22,7 +22,9 @@ paths:
   (`BookController`, `BookService`, `/api/books`),
   `interest/` holds a user's genre and language interests (`/api/interests`), `loan/` holds loans,
   reservations, fines and payments (`/api/loans`), `borrow/` holds the borrow page endpoints
-  (`BorrowController`, `BorrowService`, `/api/borrow`), `admin/` holds the admin users page endpoints
+  (`BorrowController`, `BorrowService`, `/api/borrow`), `returns/` holds the return page endpoints
+  (`ReturnController`, `ReturnService`, `/api/return`; named `returns` because `return` is a Java
+  keyword), `admin/` holds the admin users page endpoints
   (`AdminUserController`, `AdminUserService`, `/api/admin/users`), and `config/` holds the security setup and the JSON error
   handler. A new feature gets its own package with its controller, service, repository
   and entities together; cross-cutting configuration goes in a `config/` package when needed.
@@ -44,7 +46,7 @@ paths:
   with `403`, and logs the session out.
 - Public routes: `POST /api/users`, `POST /api/auth/login`, `GET /api/ping` and
   `/actuator/health`. Everything else needs a session and answers `401` without one, including
-  `PUT /api/users/me`, `/api/interests/**`, `/api/loans/**` and `/api/borrow/**`, which any logged-in
+  `PUT /api/users/me`, `/api/interests/**`, `/api/loans/**`, `/api/borrow/**` and `/api/return/**`, which any logged-in
   user may call; there are no login redirects or forms.
 - `/api/books/**`, `/api/catalogue/**` and `/api/admin/**` are admin only, both as a URL rule in
   `SecurityConfig` and through `@PreAuthorize` on `BookController`, `ColumnController` and
@@ -87,7 +89,8 @@ paths:
   once. Borrowing a reserved book fills in `borrowed_at` and `due_at` on the same row.
 - A book's `stock` is always `amount` minus its holdings: open loans (no return date) plus
   reservations not yet released. The catalogue endpoints only take `amount` and recompute `stock`;
-  an amount below the holdings is rejected.
+  an amount below the holdings is rejected. Returning a book sets `returned_at` and puts its copy
+  back into stock.
 - Expired reservations are released whenever the borrow page, the history, a catalogue update or a
   user delete needs exact numbers, and by `ReservationReleaser` every 10 minutes
   (`@EnableScheduling`), so catalogue stock does not go stale when nobody opens those pages.
@@ -125,6 +128,29 @@ paths:
 - `GET` and `PUT /api/borrow/columns` store the user's borrow table column widths (five
   percentages) in `users.borrow_columns`, the same way as the catalogue column widths.
 
+## Return Endpoints
+
+- `GET /api/return` lists the caller's open loans, active reservations and returned loans whose
+  late fine is still unpaid, with the same `page`, `size`, `sort` and `dir` parameters as the
+  catalogue. Sort keys are `isbn`, `title`, `author`, `genre`, `language` and `due` (the default,
+  ascending; a reservation sorts by `reservedUntil`); filters are `isbn`, `title`, `author`,
+  `genreId` and `languageId`. Each row carries the loan `id`, the book details, `status`
+  (`BORROWED`, `OVERDUE`, `UNPAID` or `RESERVED`), `dueAt`, `returnedAt`, `reservedUntil`,
+  `overdueDays` and `fine`. The response also carries the filter options (distinct values across
+  the caller's rows) and `totalUnpaid`, the sum of the unpaid fines. Expired reservations are
+  released first, so they never appear. A user holds few loans, so this list is filtered, sorted
+  and paged in memory like the admin users list.
+- `POST /api/return/{loanId}` returns a loan and answers the updated row: `404` when the loan is
+  not the caller's, `409` when it is a reservation or was already returned. It locks the book row
+  and puts the copy back into stock. A late return then shows as `UNPAID`, and the fine is paid
+  through the existing `/api/loans/{id}/pay` and `/api/loans/pay-all` endpoints.
+- `POST /api/return/{loanId}/unreserve` cancels an active reservation: it sets `released_at` and
+  puts the copy back into stock, so the row shows as `EXPIRED` in the history afterwards. The fee is
+  not refunded. `404` when the loan is not the caller's, `409` when it is a loan rather than a
+  reservation or the reservation has already ended.
+- `GET` and `PUT /api/return/columns` store the user's return table column widths (five
+  percentages) in `users.return_columns`, the same way as the catalogue column widths.
+
 ## Admin User Endpoints
 
 - `GET /api/admin/users` lists users with their borrow and fine statistics, with the same `page`,
@@ -158,7 +184,7 @@ paths:
   context; `PingControllerTest` is a `@WebMvcTest` slice (it uses `@WithMockUser`, because the
   slice does not load `SecurityConfig`). `UserFlowTest` covers the whole sign-up and login flow
   through `MockMvc`, carrying the session between requests; `InterestFlowTest`, `LoanFlowTest`,
-  `BookFlowTest`, `ColumnFlowTest`, `BorrowFlowTest` and `AdminUserFlowTest` do the same for their
+  `BookFlowTest`, `ColumnFlowTest`, `BorrowFlowTest`, `ReturnFlowTest` and `AdminUserFlowTest` do the same for their
   routes, and `LoanServiceTest` covers every loan status, fine rule, borrow block and reservation
   release. `AdminUserFlowTest` also checks that a
   demoted admin's old session answers `401`, the delete rules and self-deletion.
