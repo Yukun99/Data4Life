@@ -99,4 +99,21 @@ docker compose up -d --build
 Both images build from source inside Docker. The site is then on port 8088 of the host for testing
 on the local network. For public access, add a reverse proxy or tunnel client (Caddy, Traefik,
 cloudflared, ...) to the compose file and point it at `http://web:80`; the comment in the file marks
-the spot. A CI pipeline that runs this on push is still to be written.
+the spot.
+
+### Hosts Without Compose
+
+Some hosts can pull and run images but cannot build them or run Compose. For those, the `Images`
+GitHub Actions workflow builds both images on every push to `main` and pushes them to the GitHub
+Container Registry as `ghcr.io/<owner>/<repo>-web` and `ghcr.io/<owner>/<repo>-backend` (lower case,
+tagged `latest` and with the short commit hash). On the host, create one network and three
+containers on it, named as in `docker-compose.yml` and with the same environment variables:
+
+| Container | Image                 | Settings                                                            |
+|-----------|-----------------------|---------------------------------------------------------------------|
+| `db`      | `postgres:17-alpine`  | `POSTGRES_*` variables, a volume on `/var/lib/postgresql/data`      |
+| `backend` | the `-backend` image  | `DB_URL`, `DB_USER`, `DB_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
+| `web`     | the `-web` image      | host port `8088` to container port `80`                             |
+
+Start them in that order. The names matter, because Nginx looks for `backend` and the backend for
+`db`.
