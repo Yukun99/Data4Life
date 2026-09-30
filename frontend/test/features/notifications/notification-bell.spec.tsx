@@ -36,10 +36,10 @@ const page = (items: Notification[], hasMore = false, unread = 2): MockRoutes =>
 const renderBell = (routes: MockRoutes = {}) => {
   const fetchMock = mockFetch({ ...page([ready, unpaid, overdue]), ...routes });
   const { store, ui } = withStore(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={['/return']}>
       <NotificationBell />
       <Routes>
-        <Route path="/" element={<p>home route</p>} />
+        <Route path="/return" element={<p>return route</p>} />
         <Route path="/borrow" element={<p>borrow route</p>} />
         <Route path="/profile" element={<p>profile route</p>} />
       </Routes>

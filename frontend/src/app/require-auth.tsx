@@ -5,7 +5,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { Navigate, Outlet } from 'react-router';
 
 type RequireAuthProps = {
-  /** When true, only logged-out visitors may pass; logged-in users go to the home page. */
+  /** When true, only logged-out visitors may pass; logged-in users go to the borrow page. */
   guest?: boolean;
 };
 
@@ -23,7 +23,7 @@ const RequireAuth = ({ guest = false }: RequireAuthProps) => {
 
   if (guest) {
     return user ? (
-      <Navigate to="/" replace />
+      <Navigate to="/borrow" replace />
     ) : (
       <Box sx={{ minHeight: '100vh', display: 'grid' }}>
         <Outlet />

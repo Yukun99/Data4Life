@@ -5,7 +5,6 @@ import RequireAuth from '@/app/require-auth';
 import BorrowPage from '@/pages/borrow/borrow-page';
 import CataloguePage from '@/pages/catalogue/catalogue-page';
 import CreatePage from '@/pages/create/create-page';
-import HomePage from '@/pages/home/home-page';
 import LoginPage from '@/pages/login/login-page';
 import ProfilePage from '@/pages/profile/profile-page';
 import ReturnPage from '@/pages/return/return-page';
@@ -32,7 +31,6 @@ const AppRoutes = () => {
         </Route>
         <Route element={<RequireAuth />}>
           <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
             <Route path="/borrow" element={<BorrowPage />} />
             <Route path="/return" element={<ReturnPage />} />
             <Route path="/profile" element={<ProfilePage />} />
@@ -42,7 +40,7 @@ const AppRoutes = () => {
             </Route>
           </Route>
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/borrow" replace />} />
       </Routes>
     </>
   );

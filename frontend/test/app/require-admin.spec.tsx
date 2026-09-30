@@ -10,7 +10,7 @@ const renderAt = (user: User) =>
     withStore(
       <MemoryRouter initialEntries={['/users']}>
         <Routes>
-          <Route path="/" element={<p>home route</p>} />
+          <Route path="/borrow" element={<p>borrow route</p>} />
           <Route element={<RequireAdmin />}>
             <Route path="/users" element={<p>users route</p>} />
           </Route>
@@ -21,10 +21,10 @@ const renderAt = (user: User) =>
   );
 
 describe('RequireAdmin', () => {
-  it('sends a non-admin home', () => {
+  it('sends a non-admin to the borrow page', () => {
     renderAt(ada);
 
-    expect(screen.getByText('home route')).toBeInTheDocument();
+    expect(screen.getByText('borrow route')).toBeInTheDocument();
     expect(screen.queryByText('users route')).not.toBeInTheDocument();
   });
 

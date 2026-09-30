@@ -11,7 +11,7 @@ const renderAt = (path: string) =>
 
 describe('DocumentTitle', () => {
   it.each([
-    ['/', 'Library - Home'],
+    ['/borrow', 'Library - Borrow'],
     ['/login', 'Library - Login'],
     ['/create', 'Library - Create Account'],
     ['/profile', 'Library - Profile'],

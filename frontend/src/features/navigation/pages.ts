@@ -1,6 +1,5 @@
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
-import HomeIcon from '@mui/icons-material/Home';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import PeopleIcon from '@mui/icons-material/People';
@@ -15,7 +14,6 @@ export type Page = {
 };
 
 export const PAGES: Page[] = [
-  { path: '/', label: 'Home', icon: HomeIcon, testId: 'nav-home' },
   { path: '/borrow', label: 'Borrow', icon: MenuBookIcon, testId: 'nav-borrow' },
   { path: '/return', label: 'Return', icon: AssignmentReturnIcon, testId: 'nav-return' },
   { path: '/profile', label: 'Profile', icon: AccountCircleIcon, testId: 'nav-profile' },

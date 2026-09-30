@@ -42,7 +42,7 @@ const useCreate = () => {
     try {
       await apiFetch('/api/users', { method: 'POST', body: JSON.stringify(fields) });
       await dispatch(login({ email: fields.email, password: fields.password })).unwrap();
-      navigate('/');
+      navigate('/borrow');
     } catch (err) {
       setError(typeof err === 'string' ? err : errorMessage(err));
     } finally {

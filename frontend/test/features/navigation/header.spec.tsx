@@ -8,16 +8,16 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { ada, admin } from '../../users';
 import withStore from '../../with-store';
 
-const NON_ADMIN_IDS = ['nav-home', 'nav-borrow', 'nav-return', 'nav-profile'];
+const NON_ADMIN_IDS = ['nav-borrow', 'nav-return', 'nav-profile'];
 
 const renderHeader = (user: User) =>
   render(
     withStore(
       <ThemeProvider theme={theme} defaultMode="light">
-        <MemoryRouter initialEntries={['/']}>
+        <MemoryRouter initialEntries={['/profile']}>
           <Header />
           <Routes>
-            <Route path="/" element={<p>home route</p>} />
+            <Route path="/profile" element={<p>profile route</p>} />
             <Route path="/borrow" element={<p>borrow route</p>} />
           </Routes>
         </MemoryRouter>

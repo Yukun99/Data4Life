@@ -12,7 +12,7 @@ const renderCreate = () =>
       <MemoryRouter initialEntries={['/create']}>
         <Routes>
           <Route path="/create" element={<CreatePage />} />
-          <Route path="/" element={<p>home route</p>} />
+          <Route path="/borrow" element={<p>borrow route</p>} />
         </Routes>
       </MemoryRouter>,
     ).ui,
@@ -26,7 +26,7 @@ const fillAndSubmit = async (password = 'secret123') => {
 };
 
 describe('CreatePage', () => {
-  it('posts the new user, logs in and goes home', async () => {
+  it('posts the new user, logs in and goes to the borrow page', async () => {
     const fetchMock = mockFetch({
       'POST /api/users': { status: 201, body: user },
       'POST /api/auth/login': { status: 200, body: user },
@@ -35,7 +35,7 @@ describe('CreatePage', () => {
 
     await fillAndSubmit();
 
-    expect(await screen.findByText('home route')).toBeInTheDocument();
+    expect(await screen.findByText('borrow route')).toBeInTheDocument();
     const createCall = fetchMock.mock.calls.find(([path]) => path === '/api/users');
     expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({
       name: 'Ada',

@@ -11,7 +11,7 @@ const renderLogin = () => {
     <MemoryRouter initialEntries={['/login']}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<p>home route</p>} />
+        <Route path="/borrow" element={<p>borrow route</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -26,13 +26,13 @@ const fillAndSubmit = async (password: string) => {
 };
 
 describe('LoginPage', () => {
-  it('posts the credentials, stores the user and goes home', async () => {
+  it('posts the credentials, stores the user and goes to the borrow page', async () => {
     const fetchMock = mockFetch({ 'POST /api/auth/login': { status: 200, body: ada } });
     const store = renderLogin();
 
     await fillAndSubmit('secret123');
 
-    expect(await screen.findByText('home route')).toBeInTheDocument();
+    expect(await screen.findByText('borrow route')).toBeInTheDocument();
     expect(store.getState().user.user).toEqual(ada);
     const loginCall = fetchMock.mock.calls.find(([path]) => path === '/api/auth/login');
     expect(JSON.parse(String(loginCall?.[1]?.body))).toEqual({

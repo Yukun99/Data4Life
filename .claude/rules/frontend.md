@@ -47,10 +47,10 @@ cycles. Only `app/` exists at first; create the others when something belongs th
 
 - MUI (`@mui/material`, `@mui/icons-material`, Emotion) for components and `react-router` for
   routing. `app/routes.tsx` declares the routes. `/login` and `/create` are guest routes, and
-  `app/require-auth.tsx` sends a logged-in user from them to `/`. `/`, `/borrow`, `/return`
+  `app/require-auth.tsx` sends a logged-in user from them to `/borrow`. `/borrow`, `/return`
   and `/profile` need a login and render inside `app/layout.tsx`, which adds the header.
   `/users` and `/catalogue` are also wrapped in `app/require-admin.tsx`, which sends non-admins to
-  `/`. Unknown paths go to `/`.
+  `/borrow`. There is no home page: `/` and every unknown path go to `/borrow`.
 - `/profile` has two columns that stack on narrow screens. The left holds the profile card (edit
   name and icon; the edit dialog also has a Delete account button with a confirm step that calls
   `DELETE /api/auth/me` through the `deleteAccount` thunk and, on success, clears the user so the

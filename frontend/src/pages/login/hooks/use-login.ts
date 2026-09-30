@@ -18,7 +18,7 @@ const useLogin = () => {
     setSubmitting(true);
     try {
       await dispatch(login({ email, password })).unwrap();
-      navigate('/');
+      navigate('/borrow');
     } catch (err) {
       setError(typeof err === 'string' ? err : errorMessage(err));
     } finally {
